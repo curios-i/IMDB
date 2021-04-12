@@ -3,7 +3,7 @@ library(tidyverse)
 library(caret)
 memory.limit(size=200000)
 max_words <- 20000 
-# Defining vectorize sequences function
+
 
 #Preparing data
 imdb_dir <- "~/Downloads/aclImdb"
