@@ -1,7 +1,9 @@
 library(keras)
 library(tidyverse)
 library(caret)
+# setting virtual memory size for CPU training
 memory.limit(size=200000)
+#setting maximum words limit for text tokenization
 max_words <- 20000 
 
 
@@ -32,8 +34,7 @@ sequences <- texts_to_sequences(tokenizer, texts)
 word_index = tokenizer$word_index
 cat("Found", length(word_index), "unique tokens.\n")
 #Found 115970 unique tokens.
-# train_sequences will be used later on with other models
-# where padding is required
+# Now we transfer sequences to x and labels to y
 x<-sequences
 y<-as.numeric(labels)
 # removes extra variables to clear memory
@@ -57,14 +58,14 @@ tempdf%>%filter(nwords>500)%>%summarise(n=n()/length(train_sequences))
 # If we select max review length as 800, % of reviews would be truncated
 tempdf%>%filter(nwords>800)%>%summarise(n=n()/length(train_sequences))
 ################################################
-# Preparing data for dense Feedforward models
+# Preparing data for Dense Layers models
 ################################################
-# For FF model, we need to convert integer vectors representing
+# For Dense Layer model, we need to convert integer vectors representing
 #review texts into a tensor of shape (samples, vector_sequence)
 # where samples are no of rows of matrix and vector_sequence
 # is the vector in sequences list converted into a one-hot
-# encoding row of dimention=max_words. Only those columns will
-#be 1 in a row (represnting a review) whose corresting word
+# encoding row of dimension=max_words. Only those columns will
+#be 1 in a row (representing a review) whose corresponding word
 # index is found in the row, all other columns will be 0
 
 # First we define a function to convert list of integer vectors
@@ -81,7 +82,8 @@ vectorize_sequences <- function(sequences, dimension = max_words) {
 # into a tensor or shape (samples, vector_sequence)
 x_train <- vectorize_sequences(x_train)
 x_test<-vectorize_sequences(x_test)
-# Simple Feedforward model
+################################################
+# Simple Dense Layer Feedforward model
 ################################################
 model <- keras_model_sequential() %>% 
   layer_dense(units = 16, activation = "relu", input_shape = c(max_words)) %>% 
@@ -113,7 +115,7 @@ results
 #loss accuracy 
 #0.8891655 0.8626754
 ###################################################
-#Feedforward model with dropout
+# Dense Layer Feedforward model with dropout
 ###################################################
 k_clear_session()
 model <- keras_model_sequential() %>% 
@@ -129,7 +131,6 @@ model %>% compile(
 ) 
 history <- model %>% fit(
   x_train, y_train,
-  shuffle=TRUE,
   epochs = 20,
   batch_size = 512,
   validation_split = 0.2
@@ -144,9 +145,9 @@ results <- model %>% evaluate(x_test, y_test)
 results
 #loss  accuracy 
 #0.5989639 0.8790402
-###################################################
-# Feedforward model with kernal L2 regularization
-###################################################
+##############################################################
+# Dense Layer Feedforward model with kernal L2 regularization
+##############################################################
 k_clear_session()
 model <-keras_model_sequential() %>%
   layer_dense(units = 16, kernel_regularizer = regularizer_l2(0.01),
