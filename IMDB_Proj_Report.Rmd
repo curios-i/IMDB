@@ -621,4 +621,4 @@ We can print results of our first model as.
 model_results<-bind_rows(model_results,data_frame(method="Dense Layer with L2 Weight Regularization",accuracy=results[[2]],loss=results[[1]]))
 kable(model_results)
 ```
-
+## Preparing Data for Rest of the Models
