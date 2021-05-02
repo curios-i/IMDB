@@ -2,16 +2,623 @@
 title: "Project Report-IMDB Sentiment Analysis"
 author: "Curios_i"
 date: "11/04/2021"
-output: pdf_document
+header-includes:
+   - \usepackage{soul}
+   - \usepackage{color}
+output: 
+  pdf_document: 
+    toc: yes
+    number_sections: yes
+    latex_engine: xelatex
 urlcolor: blue
 ---
 
 ```{r setup, include=FALSE}
+library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
+\definecolor{fancyTextColor}{HTML}{4284f5}
+\definecolor{highlightColor}{HTML}{EBEDEF}
+\newpage
 # Introduction
 Sentiment Analysis is a common natural languag processing task that Data Scientist need to perform. In this project, a sentiment classifier is built which evaluates the polarity of piece of text being positive or negative. We have selected IMDB dataset: a set of 50,000 reviews from Internet Movie Database. We shall be using different deep machine learning (Deep Neural Network) methods to classify movie reviews as positive or negative. The main objective of this project is to learn different deep learning techniques, though they were not taught in the HarvardX Data Science course. 
+
 # Data Analysis
+
 ## Grabbing the Data
+
+IMDB movie review dataset is available from different sources. However, we have used the dataset from Stanford University in this project.
+
+### Stanford University
+
+In the project we have used the dataset from Standford University. It can be downloaded from:
+
+[http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz.](http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz.)
+
+The first step is to download the aclImdb_v1.tar.gz file and unzip it into ~/Downloads/ directory. The orginal aclImdb folder has separate folders for train and test data. 
+### Kaggle
+
+IMDB dataset is also available from Kaggle in CSV form. It can be downloaded from :
+
+[https://www.kaggle.com/lakshmi25npathi/imdb-dataset-of-50k-movie-reviews](https://www.kaggle.com/lakshmi25npathi/imdb-dataset-of-50k-movie-reviews)
+
+### Keras Library
+
+Another source of IMDB dataset is Keras R library. Keras is the package we have used in this project for deep neural networks. We shall introduce Keras soon in this report.
+
+## Data Analysis
+
+The core dataset contains 50,000 reviews split evenly into 25k train and 25k test sets. The overall distribution of labels is balanced (25k pos and 25k neg). We also include an additional 50,000 unlabeled documents for unsupervised learning. 
+
+In the entire collection, no more than 30 reviews are allowed for anygiven movie because reviews for the same movie tend to have correlated ratings. Further, the train and test sets contain a disjoint set of movies, so no significant performance is obtained by memorizing movie-unique terms and their associated with observed labels.  In the labeled train/test sets, a negative review has a score <= 4 out of 10, and a positive review has a score >= 7 out of 10. Thus reviews with more neutral ratings are not included in the train/test sets. 
+
+### Files
+
+There are two top-level directories [train/, test/] corresponding to the training and test sets. Each contains [pos/, neg/] directories for the reviews with binary labels positive and negative. Within these directories, reviews are stored in text files named following the convention [[id]_[rating].txt] where [id] is a unique id and [rating] is the star rating for that review on a 1-10 scale. For example, the file [test/pos/200_8.txt] is the text for a positive-labeled test set example with unique id 200 and star rating 8/10 from IMDb. The [train/unsup/] directory has 0 for all ratings because the ratings are omitted for this portion of the dataset.
+
+Since machine learning algorithms work better when we have more training data as compared to test data, we have merged the training and test sets into one folder, data, and then we shall use caret package to randomly generate a training set of 60% and a test set of 40%. 
+
+While merging train and test folders, we also found that there were 3,540 reviews with the same file names in both pos and neg folders. So, after merging train and test folders, the data folder contains pos and neg folders, each with 21,461 text files (each file containing a review).
+
+## Preparing the Data
+In preparing the data, we transfer reviews texts from ~/Downloads/aclImdb folder into a "texts" string variable, while the sentiment of the review is stored in the "labels" variable. Following is the code.
+
+```{r grabbing-data,cache=TRUE,results='hide',warning=FALSE,message=FALSE}
+library(keras)
+library(tidyverse)
+library(caret)
+# setting virtual memory size for CPU training
+memory.limit(size=200000)
+#setting maximum words limit for text tokenization
+max_words <- 20000 
+#Preparing data
+imdb_dir <- "~/Downloads/aclImdb"
+data_dir <- file.path(imdb_dir, "data")
+labels <- c()
+texts <- c()
+# downloads reviews' text in texts while corresponding
+#sentiments are stored in labels, 0=negative, 1= positive
+for (label_type in c("neg", "pos")) {
+  label <- switch(label_type, neg = 0, pos = 1)
+  dir_name <- file.path(data_dir, label_type)
+  for (fname in list.files(dir_name, pattern = glob2rx("*.txt"), 
+                           full.names = TRUE)) {
+    texts <- c(texts, readChar(fname, file.info(fname)$size))
+    labels <- c(labels, label)
+  }
+}
+```
+
+Next, we use keras functoins text_tokenizer() and fit_text_tokenizer() to turn each of \colorbox{highlightColor}{texts} into a vector of integers based on keras dictionary. We keep maximum number of words to `r format(max_words, scientific=FALSE)`, i.e. only most common `r format(max_words, scientific=FALSE)` words will be kept while generating integer vectors out of \colorbox{highlightColor}{texts}. Reviews in \colorbox{highlightColor}{texts} are then converted into integer vectors \colorbox{highlightColor}{sequences}. By default, all punctuation is removed, turning the texts into space-separated sequences of words (words maybe include the ' character). These sequences are then split into lists of tokens. They will then be indexed or vectorized. 0 is a reserved index that won't be assigned to any word.
+
+The object \colorbox{highlightColor}{tokenizer} has an attribute `word_index`, which is a named list mapping words to their rank/index(int).
+```{r tokinenizer,cache=TRUE,results='hide',warning=FALSE,message=FALSE}
+# Now we tokenize the texts read from the files
+# We restrict it to max 20000 words
+
+tokenizer <- text_tokenizer(num_words = max_words)%>%
+  fit_text_tokenizer(texts)
+# tokenize sequences (vectors of integers) are generated
+# and stored in a list sequences
+sequences <- texts_to_sequences(tokenizer, texts)
+word_index = tokenizer$word_index
+cat("Found", length(word_index), "unique tokens.\n")
+#Found 115970 unique tokens.
+
+```
+Using the word_index attribute of tokenizer, we display that the tokenizing process has found `r format(length(word_index), scientific=FALSE)` unique tokens in all reviews.
+
+Please note that though we have found `r format(length(word_index), scientific=FALSE)` only most frequent `r format(max_words, scientific=FALSE)` words are used in the analysis. Here, number of tokens
+```{r echo=TRUE}
+max(sapply(sequences,max))
+
+```
+
+which is what we set in our `max_words` variable.
+
+Here is a quick look on the `word_index`
+```{r echo=TRUE}
+head(word_index)
+
+```
+Now we transfer sequences to x and labels to y, then remove extra variable which will not be used anymore.
+```{r cache=TRUE,results='hide',warning=FALSE,message=FALSE}
+x<-sequences
+y<-as.numeric(labels)
+rm(texts,sequences,labels)
+```
+### Dividing Data into Train and Test Set
+In this project, we are dividing the data downloaded from Stanford database into three portions:
+
+Initially we shall set 60% of data for training and 40% for testing using the Caret package. The train set is further divided into 80% for training and 20% for validation. In this way, 48% of the data will be used for training, 12% for validation and 40% for final testing. The reasons for doing that are
+
+* We need to tune hyperparameters of our model, for which we require a validation data set. The test dataset will be left alone only for testing.
+
+* We want to use more data for training then testing. If we have used the original division of Stanford IMDB data, which was 50% for training and 50% for testing, after dividing training set into validation, there would have been less data for training and more data for testing (including validation set). 
+
+Following is the code we have used to breakdown data into train and test set, whereas, we shall use keras functions to further divide the data from train set to validation set at the time of fitting the model. 
+
+Please note that since x is a list of integer vectors (one-hot encoded), we are using y to generate test index.
+
+```{r cache=TRUE,results='hide',warning=FALSE,message=FALSE}
+set.seed(100)
+#since x is a list of integer vectors, we are using y
+# to generate test_index
+test_index<-createDataPartition(y,times=1,p=0.4,list=FALSE)
+x_train<-x[-test_index]
+y_train<-y[-test_index]
+x_test<-x[test_index]
+y_test<-y[test_index]
+```
+Rest of the data preparation depends on the type of model we shall be using, so we shall deal it seprately in different model subsections.
+
+# Dense Layers DNNs
+
+## A Brief Introduction
+
+Neural networks originated in the computer science field to answer questions that normal statistical approaches were not designed to answer at the time.
+
+At their most basic levels, neural networks have three layers: an input layer, a hidden layer, and an output layer. The input layer consists of all of the original input features. The majority of the learning takes place in the hidden layer, and the output layer outputs the final predictions.
+
+![Representation of a simple feedforward neural network]("./Images/basic-neural-net.png")
+
+Neurons are the basic units of a neural network.  In an ANN, each neuron in a layer and is connected to each neuron in the next layer.  When the inputs are transmitted between neurons, the weights are applied to the inputs along with the bias.
+
+Let us understand the skeleton of a neuron.
+
+![Skeleton of a Neuron]("./Images/Neuron Skeleton.jpeg")
+
+A neuron has following components.
+
+* Inputs: Inputs are the set of values for which we need to predict the output value. They can be viewed as features or attributes in a dataset.
+* Weights: weights are the real values that are associated with each feature which tells the importance of that feature in predicting the final value. (we will know more about in this article)
+* Bias: Bias is used for shifting the activation function towards left or right, it can be referred to as a y-intercept in the line equation. (we will know more about this in this article)
+* Summation Function: The work of the summation function is to bind the weights and inputs together and find their sum.
+* Activation Function: It is used to introduce non-linearity in the model.
+
+In R we can write this as:
+
+```{r eval=FALSE}
+output <- activation_function(dot(W, input)+b)
+```
+Where W is a 2D tensor of weights and b is a vector.
+
+### Layers and Nodes
+
+The layers are made of nodes. A node is just a place where computation happens, we also called it a neuron.
+The layers and nodes are the building blocks of our DNN and they decide how complex the network will be. Layers are considered dense (fully connected) when all the nodes in each successive layer are connected. Consequently, the more layers and nodes you add the more opportunities for new features to be learned (commonly referred to as the model’s capacity). Beyond the input layer, which is just our original predictor variables, there are two main types of layers to consider: hidden layers and an output layer.
+
+### Activation Function {#activation_function}
+
+As stated previously, each node is connected to all the nodes in the previous layer. Each connection gets a weight and then that node adds all the incoming inputs multiplied by its corresponding connection weight plus an extra bias parameter (w~0~). The summed total of these inputs become an input to an activation function.
+
+The activation function is simply a mathematical function that determines whether or not there is enough informative input at a node to fire a signal to the next layer. There are multiple activation functions to choose from but the most common ones include:
+
+![Activation Functions]("./Images/ActivationFunctions.PNG")
+
+When using rectangular data, the most common approach is to use ReLU activation functions in the hidden layers. The ReLU activation function is simply taking the summed weighted inputs and transforming them to a  
+0 (not fire) or > 0 (fire) if there is enough signal. For the output layers we use the linear activation function for regression problems, the sigmoid activation function for binary classification problems, and softmax for multinomial classification problems.
+
+### Backpropogation
+
+On the first run (or forward pass), the DNN will select a batch of observations, randomly assign weights across all the node connections, and predict the output. The engine of neural networks is how it assesses its own accuracy and automatically adjusts the weights across all the node connections to improve that accuracy. This process is called backpropagation. To perform backpropagation we need two things:
+
+1. An Objective (loss) Function
+2. An Optimizer
+
+#### Objective (loss) Function {#loss_function}
+
+First, you need to establish an objective (loss) function to measure performance. For regression problems this might be mean squared error (MSE) and for classification problems it is commonly binary and multi-categorical cross entropy. Following is the brief decription of some loss functions used in keras for regression and classification models.
+
+##### Regression Models
+
+* MSE:  Mean squared error is the average of the squared error. The squared component results in larger errors having larger penalties. This (along with RMSE) is the most common error metric to use.
+
+* RMSE: Root mean squared error. This simply takes the square root of the MSE metric so that your error is in the same units as your response variable. If your response variable units are dollars, the units of MSE are dollars-squared, but the RMSE will be in dollars. 
+
+* MAE: Mean absolute error. Similar to MSE but rather than squaring, it just takes the mean absolute difference between the actual and predicted values.This results in less emphasis on larger errors than MSE.
+
+* RMSLE: Root mean squared logarithmic error. Similar to RMSE but it performs a log() on the actual and predicted values prior to computing the difference. When your response variable has a wide range of values, large response values with large errors can dominate the MSE/RMSE metric. RMSLE minimizes this impact so that small response values with large errors can have just as meaningful of an impact as large response values with large errors. 
+
+##### Classification Models
+
+* Crossentropy: crossentropy is usually the best choice whenyou’re dealin g with models that output probabilities. Crossentropy is a quantity from the field of Information Theory that measures the distance between probability distributions or, in this case, between the groundtruth distribution and your predictions. this metric disproportionately punishes predictions where we predict a small probability for the true class.
+  + Binary Crossentropy
+Use this cross-entropy loss when there are only two label classes (assumed to be 0 and 1).
+  + Categorical Crossentropy
+Use this crossentropy loss function when there are two or more label classes. We expect labels to be provided in a one_hot representation.
+  + Sparse Categorical Crossentropy
+Use this crossentropy loss function when there are two or more label classes. We expect labels to be provided as integers.
+
+#### Optimizer {#optimizer}
+
+Optimizers are algorithms or methods used to change the attributes of your neural network such as weights and learning rate in order to reduce the losses. 
+
+In this project, we have used RMSprop in all deep learning models, however, we have covered gradient descent, stochastic gradient descent and Adam in this report as well. 
+
+* Gradient Descent: Though keras doesn't provide any optimizer only with gradient descent, rest of all optimizers are some variations of gradient descent, so it is worthwhile to start with it.
+
+Gradient descent is a first-order optimization algorithm which is dependent on the first order derivative of a loss function. It calculates that which way the weights should be altered so that the function can reach a minima. Through backpropagation, the loss is transferred from one layer to another and the model’s parameters also known as weights are modified depending on the losses so that the loss can be minimized.
+
+**Advantages:**
+
+1. Easy computation.
+2. Easy to implement.
+3. Easy to understand.
+
+**Disadvantages:**
+
+1. May trap at local minima.
+2. Weights are changed after calculating gradient on the whole dataset. So, if the dataset is too large than this may take years to converge to the minima.
+3. Requires large memory to calculate gradient on the whole dataset.
+
+* Stochastic Gradient Descent: It’s a variant of Gradient Descent. It tries to update the model’s parameters more frequently. In this, the model parameters are altered after computation of loss on each training example. So, if the dataset contains 1000 rows SGD will update the model parameters 1000 times in one cycle of dataset instead of one time as in Gradient Descent.
+
+As the model parameters are frequently updated parameters have high variance and fluctuations in loss functions at different intensities.
+
+**Advantages:**
+
+1. Frequent updates of model parameters hence, converges in less time.
+2. Requires less memory as no need to store values of loss functions.
+3. May get new minima’s.
+
+**Disadvantages:**
+
+1. High variance in model parameters.
+2. May shoot even after achieving global minima.
+3. To get the same convergence as gradient descent needs to slowly reduce the value of learning rate.
+
+* RMSProp: RMSprop, or Root Mean Square Propogation has an interesting history. It was devised by the legendary Geoffrey Hinton, while suggesting a random idea during a course in a class.
+
+Referring to the following figure, RMSProp tries to dampen the oscillations in w1 direction, as would be taken by a gradient descent algorithm, at the same time changing the learning rate automatically. RMSProp adjust the learning rate for each parameter (node).
+
+![Grad Descent Vs Ideal Path]("./Images/moment_compo.png")
+
+
+In RMS prop, each update is done according to the equations described below. This update is done separately for each parameter.
+
+For each Parameter w^j^ (j subscript dropped for clarity)
+
+Eq~1~: $v_{t}= \rho v_{t-1} + (1-\rho) * g_{t}^2$
+
+Eq~2~: $\Delta w_{t} =-\frac{\eta}{\sqrt{v_{t}}+\epsilon}*g_{t}$
+
+Eq~3~: $w_{t+1} = w_{t} + \Delta w_{t}$
+
+Here:
+
+$\eta$  : Initial Learning Rate
+
+$w_{t}$ : Exponential Average of squares of gradients
+
+$g_{t}$ : Gradient at time t along $w^{j}$
+
+$\epsilon$ : A small positive number to make sure when $v_{t}$ is zero or close to zero, $\Delta w_{t}$ doesn't become too large
+
+Equation 2 implies that the change in paratmeter w^J^ in the current iteration depends on the current gradient as well as a variable learning rate. The variable learning rate is equal to initial learning rate $\eta$ divided by square root of exponential average of squares of gradient. 
+
+Now referring again to Fig. 4, $\sqrt{v_{t}+\epsilon}$ is relatively large number in w~1~ direction as compared to w~2~ direction. As a reasult $\Delta w_{t}$ in w~1~ is relatively small as compared to that in w~2~ direction, as we desire to minimize oscillation of learning rate and get to the minima soon, the ideal path marked in the Fig. 4.
+
+* Adam : Adaptive Moment Estimation (Adam) is another method that computes adaptive learning rates for each parameter. In addition to storing an exponentially decaying average of past squared gradients v~t~ like Adadelta and RMSprop, Adam also keeps an exponentially decaying average of past gradients m~t~, similar to momentum. Whereas momentum can be seen as a ball running down a slope, Adam behaves like a heavy ball with friction, which thus prefers flat minima in the error surface. We compute the decaying averages of past and past squared gradients m~t~ and v~t~ respectively as follows:
+
+$m_{t} = \beta_{1}m_{t-1}+(1-\beta_{1})g_{t}$
+
+$v_{t} = \beta_{2}v_{t-1}+(1-\beta_{2})g^2_{t}$
+
+m~t~ and v~t~ are are estimates of the first moment (the mean) and the second moment (the uncentered variance) of the gradients respectively, hence the name of the method. As m~t~ and v~t~  are initialized as vectors of 0's, the authors of Adam observe that they are biased towards zero, especially during the initial time steps, and especially when the decay rates are small (i.e. $\beta_{1}$ and $\beta_{2}$ are close to 1).
+
+These biases are counterated by computing bias-corrected first and second moment estimates:
+
+$\hat{m}_{t} = \frac{m_{t}}{1-\beta^t_{1}}$
+
+$\hat{v}_{t} = \frac{v_{t}}{1-\beta^t_{2}}$
+
+These are then used to update paratmeters just as we have seen in RMSprop.
+
+$w_{t}= w_{t-1}-\eta\frac{\hat{m}_{t}}{\sqrt{\hat{v}}+\epsilon}$
+
+The default values of hyperparameters are:
+
+$\beta_{1}= 0.9$
+
+$\beta_{2}= 0.999$
+
+$\epsilon = 10^{-8}$
+
+## Preparing Data for Dense Layer DNN Models
+
+For Dense Layer model, we need to convert integer vectors representing review texts into a tensor of shape (samples, vector_sequence) where samples are no of rows of matrix and vector_sequence is the vector in sequences list converted into a one-hot encoding row of dimension=max_words. Only those columns will be 1 in a row (representing a review) whose corresponding word index is found in the row, all other columns will be 0.
+
+First we define a function to convert list of integer vectors into a matrix (tensor).
+
+```{r one-hot,cache=TRUE,results='hide',warning=FALSE,message=FALSE}
+vectorize_sequences <- function(sequences, dimension = max_words) {
+  # Create an all-zero matrix of shape (len(sequences), dimension)
+  results <- matrix(0, nrow = length(sequences), ncol = dimension)
+  for (i in 1:length(sequences))
+    # Sets specific indices of results[i] to 1s
+    results[i, sequences[[i]]] <- 1
+  results
+}
+```
+Now convert x_train and y_train list of integer vectors into a tensor or shape (samples, vector_sequence)
+```{r one-hot_tensors,cache=TRUE,results='hide',warning=FALSE,message=FALSE, eval=FALSE}
+x_train <- vectorize_sequences(x_train)
+x_test<-vectorize_sequences(x_test)
+```
+## Simple Dense Layer Feedforward model
+
+The first DNN model we are going to build is simple 3 dense layers' model, one input, one hidden and one output layer. We shall use "relu" as activation function in input and hidden layers, and "sigmoid" for output layer. For explanation about activation function refer to section [Activation Function](#activation_function).
+```{r cache=TRUE,warning=FALSE, message=FALSE }
+library(keras)
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, activation = "relu", input_shape = c(max_words)) %>% 
+  layer_dense(units = 16, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+```
+Here is the summary of the model.
+```{r cache=TRUE, warning=FALSE, message=FALSE}
+summary(model)
+```
+Next we shall compile the model using loss function as "binary_crossentropy" (refer to section [Objective (loss) Function](#loss_function)) and using RMSprop optimzer (refer to section [Optimizer](#optimizer)).
+```{r eval=FALSE}
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+) 
+```
+### Model Training
+
+After creating the model, we shall train it to train dataset we have prepared earlier. To do so, we feed our model to a \colorbox{highlightColor}{fit()} function, at the same time we shall split the train data into a 20% validation part, which we shall use to tune hyper parameters. Results are stored in a variable \colorbox{highlightColor}{history} so that we can access hyper parameters later.
+```{r eval=FALSE}
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_split = 0.2
+)
+
+```
+Following parameters passed to \colorbox{highlightColor}{fit()} function are worth mentioning.
+
+* `batch_size`: DNNs  take a batch of data to run through the mini-batch SGD process. Batch sizes can be between one and several hundred. Small values will be more computationally burdensome while large values provide less feedback signal. Values are typically provided as a power of two that fit nicely into the memory requirements of the GPU or CPU hardware like 32, 64, 128, 256, and so on.
+
+* `epoch`: An epoch describes the number of times the algorithm sees the entire data set. So, each time the algorithm has seen all samples in the data set, an epoch has completed. The more complex the features and relationships in your data, the more epochs you’ll require for your model to learn, adjust the weights, and minimize the loss function.
+
+* `validation_split` : The model will hold out XX% of the data so that we can compute a more accurate estimate of an out-of-sample error rate.
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+library(keras)
+load("C:/Users/fahee/projects/IMDB/rdas/FFhistory.rda")
+
+```
+Call to `fit()` returns `hisotry` object. The `history` object includes parameters used to fit the model (history$params) as well as data for each of the metrics being monitored (history$metrics).
+```{r warning=FALSE, message=FALSE}
+str(history)
+```
+
+The history object has a plot() method that enables you to visualize training and validation metrics by epoch:
+```{r cache=TRUE,warning=FALSE, message=FALSE}
+plot(history)
+```
+The epoch at which maximum valdation accuracy is achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+epoch<-which.max(history$metrics$val_acc)
+epoch
+```
+While the maximum validation accuracy achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+max(history$metrics$val_acc)
+```
+The `history` plot also shows us that after `r format(epoch, scientific=FALSE)` epoch, the model starts overfitting.
+
+Now, let's fit our model for the whole train dataset for epoch = `r format(epoch, scientific=FALSE)`
+```{r cache=TRUE, message=FALSE, warning=FALSE,eval=FALSE}
+model %>% fit(x_train, y_train, epochs = epoch, batch_size = 512)
+```
+### Results
+We use keras eveluate function to evaluate our model on test data.
+```{r cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+load("C:/Users/fahee/projects/IMDB/rdas/FFresults.rda")
+```
+Finally, our simple dense layer model without any regularizatio gives us following accuracy and loss on the test data.
+```{r eval=FALSE}
+results <- model %>% evaluate(x_test, y_test)
+```
+```{r message=FALSE, warning=FALSE}
+results
+```
+In this way, this model achieved an accuracy of `r format(results[[2]]*100, scientific=FALSE)`.
+
+We can print results of our first model as.
+
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+library(knitr)
+model_results<-data_frame(method="Dense Layer",accuracy=results[[2]],loss=results[[1]])
+kable(model_results)
+```
+## Dense Layer Model with Dropout
+
+Dropout is one of the most effective and most commonly used regularization techniques for neural networks, developed by Geoff Hinton and his students at the
+University of Toronto. Dropout, applied to a layer, consists of randomly dropping out (setting to zero) a number of output features of the layer during training.
+
+The dropout rate is the fraction of the features that are zeroed out. It’s usually set between 0.2 and 0.5. At test time, no units are dropped out; instead, the layer’s output values are scaled down by a factor equal to the dropout rate, to balance for the fact that more units are active than at training time.
+```{r eval=FALSE}
+layer_output <-layer_output * sample(0:1, length(layer_output),replace = TRUE)
+```
+At test time, we scale down the output by the dropout rate. Here, we scale by 0.5 (because we previously dropped half the units):
+```{r eval=FALSE}
+layer_output <-layer_output * 0.5
+```
+
+In the first desne layer model, we saw that the model overfitting started with 7th layer. Let's add dropout to our dense layer and see how it improves the accuracy.
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+library(keras)
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, activation = "relu", input_shape = c(max_words )) %>% 
+  layer_dropout(rate=0.5)%>%
+  layer_dense(units = 16, activation = "relu") %>% 
+  layer_dropout(rate=0.5)%>%  
+  layer_dense(units = 1, activation = "sigmoid")
+```
+```{r echo=FALSE}
+library(keras)
+load("C:/Users/fahee/projects/IMDB/rdas/FFdropHistory.rda")
+```
+Here is the summary of the model.
+```{r cache=TRUE,message=FALSE, warning=FALSE}
+summary(model)
+```
+Now, let's compile the model.
+```{r eval=FALSE}
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+) 
+```
+### Model Training
+
+Again we shall go and fit the model on training dataset first by dividing it into 80% training and 20% validation. Here is the code.
+```{r eval=FALSE}
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_split = 0.2
+)
+```
+To visualize training and validation metrics by epoch we shall plot the `history`:
+```{r cache=TRUE,warning=FALSE, message=FALSE}
+plot(history)
+```
+The epoch at which maximum valdation accuracy is achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+epoch<-which.max(history$metrics$val_acc)
+epoch
+```
+While the maximum validation accuracy achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+max(history$metrics$val_acc)
+```
+
+Now, let's fit our model for the whole train dataset for epoch = `r format(epoch, scientific=FALSE)`
+```{r cache=TRUE, message=FALSE, warning=FALSE,eval=FALSE}
+model %>% fit(x_train, y_train, epochs = epoch, batch_size = 512)
+```
+### Results
+We use keras evaluate function to evaluate our model on test data.
+```{r cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+load("C:/Users/fahee/projects/IMDB/rdas/FFdropResults.rda")
+```
+Finally, this dense layers with dropouts models gives us following accuracy and loss on the test data.
+```{r eval=FALSE}
+results <- model %>% evaluate(x_test, y_test)
+```
+```{r message=FALSE, warning=FALSE}
+results
+```
+In this way, this model achieved an accuracy of `r format(results[[2]]*100, scientific=FALSE)`.
+
+We can print results of our first model as.
+
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+
+model_results<-bind_rows(model_results,data_frame(method="Dense Layer with Dropout",accuracy=results[[2]],loss=results[[1]]))
+kable(model_results)
+```
+## Dense Layer Model with Weight Regularization
+
+A common way to mitigate overfitting is to put constraints on the complexity of a network by forcing its weights to take only small values, which makes the distribution of weight values more regular. This is called weight regularization, and it’s done by adding to the loss function of the network a cost associated with having large weights.
+
+This cost comes in two flavors:
+
+* L1 regularization— The cost added is proportional to the absolute value of the weight coefficients (the L1 norm of the weights).
+
+* L2 regularization— The cost added is proportional to the square of the value of the weight coefficients (the L2 norm of the weights). L2 regularization is also called weight decay in the context of neural networks.
+
+In Keras, weight regularization is added by passing weight regularizer instances to layers as keyword arguments. The weight regulariztion is called kernal regularization.
+
+Let's add kernal regularization to our dense layer model instead of drop out.
+
+```{r cache=TRUE,message=FALSE, warning=FALSE}
+##############################################################
+# Dense Layer Feedforward model with kernal L2 regularization
+##############################################################
+k_clear_session()
+model <-keras_model_sequential() %>%
+  layer_dense(units = 16, kernel_regularizer = regularizer_l2(0.01),
+  activation = "relu", input_shape = c(max_words)) %>%
+  layer_dense(units = 16, kernel_regularizer = regularizer_l2(0.01),
+  activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+```
+Here is the summary of the model.
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+summary(model)
+```
+We compile the model with same parameters.
+
+```{r eval=FALSE}
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+) 
+```
+### Model Training
+
+We shall go and fit the model on training dataset first by dividing it into 80% training and 20% validation. Here is the code.
+```{r cache=TRUE, warning=FALSE, message=FALSE}
+load("./rdas/FFL2RegHistory.rda")
+```
+
+```{r eval=FALSE}
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_split = 0.2
+)
+```
+To visualize training and validation metrics by epoch we shall plot the `history`:
+```{r cache=TRUE,warning=FALSE, message=FALSE}
+plot(history)
+```
+The epoch at which maximum valdation accuracy is achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+epoch<-which.max(history$metrics$val_acc)
+epoch
+```
+While the maximum validation accuracy achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+max(history$metrics$val_acc)
+```
+
+Now, let's fit our model for the whole train dataset for epoch = `r format(epoch, scientific=FALSE)`
+```{r cache=TRUE, message=FALSE, warning=FALSE,eval=FALSE}
+model %>% fit(x_train, y_train, epochs = epoch, batch_size = 512)
+```
+### Results
+We use keras evaluate function to evaluate our model on test data.
+```{r cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+load("./rdas/FFL2RegResults.rda")
+```
+Finally, this dense layers with L2 regularization on weights models gives us following accuracy and loss on the test data.
+```{r eval=FALSE}
+results <- model %>% evaluate(x_test, y_test)
+```
+```{r cache=TRUE,message=FALSE, warning=FALSE}
+results
+```
+In this way, this model achieved an accuracy of `r format(results[[2]]*100, scientific=FALSE)`.
+
+We can print results of our first model as.
+
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+
+model_results<-bind_rows(model_results,data_frame(method="Dense Layer with L2 Weight Regularization",accuracy=results[[2]],loss=results[[1]]))
+kable(model_results)
+```
 
