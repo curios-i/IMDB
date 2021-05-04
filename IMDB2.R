@@ -48,15 +48,6 @@ y_train<-y[-test_index]
 x_test<-x[test_index]
 y_test<-y[test_index]
 
-#Max no of words in any review
-length(train_sequences[[which.max(lapply(train_sequences,length))]])
-# Following creates a data frame of number of words in 25000 reviews
-temp<-unlist(lapply(train_sequences,length),use.names = FALSE)
-tempdf<-data.frame(nwords=temp)
-# If we select max review length as 500, % of reviews would be truncated
-tempdf%>%filter(nwords>500)%>%summarise(n=n()/length(train_sequences))
-# If we select max review length as 800, % of reviews would be truncated
-tempdf%>%filter(nwords>800)%>%summarise(n=n()/length(train_sequences))
 ################################################
 # Preparing data for Dense Layers models
 ################################################
@@ -117,7 +108,7 @@ results
 ###################################################
 # Dense Layer Feedforward model with dropout
 ###################################################
-k_clear_session()
+k_clear_session() # clears keras session
 model <- keras_model_sequential() %>% 
   layer_dense(units = 16, activation = "relu", input_shape = c(max_words )) %>% 
   layer_dropout(rate=0.5)%>%
@@ -148,7 +139,7 @@ results
 ##############################################################
 # Dense Layer Feedforward model with kernal L2 regularization
 ##############################################################
-k_clear_session()
+k_clear_session() # clears keras session
 model <-keras_model_sequential() %>%
   layer_dense(units = 16, kernel_regularizer = regularizer_l2(0.01),
   activation = "relu", input_shape = c(max_words)) %>%
@@ -196,9 +187,9 @@ x_train<-pad_sequences(x_train, maxlen = maxlen)
 x_test<-pad_sequences(x_test, maxlen = maxlen)
 
 ####################################################
-# with 2 bidirectional LSTMs
+# Bidirectional LSTMs Model
 ####################################################
-k_clear_session()
+k_clear_session() # clears keras session
 
 model <- keras_model_sequential() %>% 
   layer_embedding(input_dim = max_features, output_dim = 32) %>% 
@@ -234,7 +225,7 @@ results
 ############################################
 # 1D conv
 ###########################################
-k_clear_session()
+k_clear_session() # clears keras session
 
 model <- keras_model_sequential() %>% 
   layer_embedding(input_dim = max_features, output_dim = 128,
@@ -271,7 +262,7 @@ results
 ################################################
 # 1D conv with 2 bidirectional LSTMs
 ################################################
-k_clear_session()
+k_clear_session() # clears keras session
 
 model <- keras_model_sequential() %>% 
   layer_embedding(input_dim = max_features, output_dim = 128,
@@ -371,3 +362,41 @@ results <- model %>% evaluate(x_test, y_test)
 results
 #loss  accuracy
 #0.4710467 0.8813698
+####################################################
+# Bidirectional LSTMs Model on cuDNN
+####################################################
+k_clear_session() # clears keras session
+
+model <- keras_model_sequential() %>% 
+  layer_embedding(input_dim = max_features, output_dim = 128) %>% 
+  layer_dropout(0.9)%>%
+  bidirectional(
+    layer_lstm(units = 64, return_sequences=TRUE,recurrent_activation = "sigmoid")
+  ) %>% 
+  bidirectional(
+    layer_lstm(units = 64,recurrent_activation = "sigmoid")
+  ) %>% 
+  #layer_dropout(0.5)%>%
+  #layer_dense(units = 64, activation = "relu")%>%
+  layer_dense(units = 1, activation = "sigmoid")
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "binary_crossentropy",
+  metrics = c("acc")
+)
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 15,
+  batch_size = 128,
+  validation_split = 0.2
+)
+epoch<-which.max(history$metrics$val_acc)
+epoch
+#10
+max(history$metrics$val_acc)
+#0.935559
+model %>% fit(x_train, y_train, epochs = epoch, batch_size = 128)
+results <- model %>% evaluate(x_test, y_test)
+results
+#     loss       acc 
+# 0.2761915 0.8995982

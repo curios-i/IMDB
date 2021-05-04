@@ -8,6 +8,7 @@ header-includes:
 output: 
   pdf_document: 
     toc: yes
+    toc_depth: 3
     number_sections: yes
     latex_engine: xelatex
 urlcolor: blue
@@ -15,13 +16,44 @@ urlcolor: blue
 
 ```{r setup, include=FALSE}
 library(knitr)
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, fig.align="center")
 ```
 \definecolor{fancyTextColor}{HTML}{4284f5}
 \definecolor{highlightColor}{HTML}{EBEDEF}
 \newpage
 # Introduction
-Sentiment Analysis is a common natural languag processing task that Data Scientist need to perform. In this project, a sentiment classifier is built which evaluates the polarity of piece of text being positive or negative. We have selected IMDB dataset: a set of 50,000 reviews from Internet Movie Database. We shall be using different deep machine learning (Deep Neural Network) methods to classify movie reviews as positive or negative. The main objective of this project is to learn different deep learning techniques, though they were not taught in the HarvardX Data Science course. 
+Sentiment Analysis is a common natural language processing task that Data Scientist need to perform. In this project, a sentiment classifier is built which evaluates the polarity of piece of text being positive or negative. We have selected IMDB dataset: a set of 50,000 reviews from Internet Movie Database. We shall be using different deep machine learning (Deep Neural Network) methods to classify movie reviews as positive or negative. The main objective of this project is to learn different deep learning techniques, though they were not taught in the HarvardX Data Science course. 
+
+This report in .rmd and pdf form as well as R code can also be downloaded from [github repository](https://github.com/curios-i/IMDB.git).
+
+# Implementation Notes {#notes}
+
+## Stochastic Nature of Neural Networks
+
+Neural networks use randomness by design to ensure they effectively learn the function being approximated for the problem. Randomness is used because this class of machine learning algorithm performs better with it than without.
+
+The most common form of randomness used in neural networks is the random initialization of the network weights. Although randomness can be used in other areas, here is just a short list:
+
+* Randomness in Initialization, such as weights.
+* Randomness in Regularization, such as dropout.
+* Randomness in Layers, such as word embedding.
+* Randomness in Optimization, such as stochastic optimization.
+* Randomness introduced due to parallel processing in CPU and GPU.
+
+These sources of randomness, and more, mean that when you run the exact same neural network algorithm on the exact same data, you are guaranteed to get different results. The model tried in this study are no exception, so definitely when this code is run, you may get a little different results than reported here.
+
+The keras FAQ article [How can I obtain reproducible results using keras during development](https://keras.rstudio.com/articles/faq.html#how-can-i-obtain-reproducible-results-using-keras-during-development-) discusses methods to get reproducible results. However, once source of randomness is GPU computation and CPU parallelization, and they must be disabled in the method mentioned to get reproducible results. Since execution of deep neural network requires a lot of computation power and much slower on CPUs (as we used in most of the models in this study), the method was not tried in this study.
+
+## CPU Vs GPU Computation
+
+DNN Applications—in particular, image processing with convolutional networks and sequence processing with recurrent
+neural networks will be excruciatingly slow on CPU, even a fast multicore CPU. Even for applications that can realistically be run on CPU, you’ll generally see speed increase by a factor or 5 or 10 by using a modern GPU. Most of the models in this study were run on CPU, only the LSTM model was finally run on GPU, since it was painfully slow on CPU and even was crashing with 8G of memory. That's why you will notice that every few epochs are used in training the models. This is also discussed in [Conclusion](#conclusion) as an opportunity.
+
+We are not covering the installation of Cuda, cuDNN, tensorflow and keras in this report, though it would have been an interesting topic considering very little and correct information is available on this topic for RStudio; most of the guidelines are for python/anaconda applications.
+
+## Reproducing the Results
+
+It is not simple and direct to reproduce the results, as mentioned in this report. Since it is not easy to write a rmarkdown report with DNN code by executing the code again and again, the models in this report were executed and results were saved in `rda` files, which were loaded in rmarkdown to generate report. The size of `rda` files and downloaded database is too large that github doesn't allow pushing them, so they were not synced with github. However, interested readers can download the database from Stanford University link provided and run this code on their environment. There will also be some variation required in the code running it on CPU Vs GPU.
 
 # Data Analysis
 
@@ -31,11 +63,11 @@ IMDB movie review dataset is available from different sources. However, we have 
 
 ### Stanford University
 
-In the project we have used the dataset from Standford University. It can be downloaded from:
+In the project we have used the dataset from Stanford University. It can be downloaded from:
 
 [http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz.](http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz.)
 
-The first step is to download the aclImdb_v1.tar.gz file and unzip it into ~/Downloads/ directory. The orginal aclImdb folder has separate folders for train and test data. 
+The first step is to download the aclImdb_v1.tar.gz file and unzip it into ~/Downloads/ directory. The original aclImdb folder has separate folders for train and test data. 
 ### Kaggle
 
 IMDB dataset is also available from Kaggle in CSV form. It can be downloaded from :
@@ -50,7 +82,7 @@ Another source of IMDB dataset is Keras R library. Keras is the package we have 
 
 The core dataset contains 50,000 reviews split evenly into 25k train and 25k test sets. The overall distribution of labels is balanced (25k pos and 25k neg). We also include an additional 50,000 unlabeled documents for unsupervised learning. 
 
-In the entire collection, no more than 30 reviews are allowed for anygiven movie because reviews for the same movie tend to have correlated ratings. Further, the train and test sets contain a disjoint set of movies, so no significant performance is obtained by memorizing movie-unique terms and their associated with observed labels.  In the labeled train/test sets, a negative review has a score <= 4 out of 10, and a positive review has a score >= 7 out of 10. Thus reviews with more neutral ratings are not included in the train/test sets. 
+In the entire collection, no more than 30 reviews are allowed for any given movie because reviews for the same movie tend to have correlated ratings. Further, the train and test sets contain a disjoint set of movies, so no significant performance is obtained by memorizing movie-unique terms and their associated with observed labels.  In the labeled train/test sets, a negative review has a score <= 4 out of 10, and a positive review has a score >= 7 out of 10. Thus reviews with more neutral ratings are not included in the train/test sets. 
 
 ### Files
 
@@ -89,7 +121,7 @@ for (label_type in c("neg", "pos")) {
 }
 ```
 
-Next, we use keras functoins text_tokenizer() and fit_text_tokenizer() to turn each of \colorbox{highlightColor}{texts} into a vector of integers based on keras dictionary. We keep maximum number of words to `r format(max_words, scientific=FALSE)`, i.e. only most common `r format(max_words, scientific=FALSE)` words will be kept while generating integer vectors out of \colorbox{highlightColor}{texts}. Reviews in \colorbox{highlightColor}{texts} are then converted into integer vectors \colorbox{highlightColor}{sequences}. By default, all punctuation is removed, turning the texts into space-separated sequences of words (words maybe include the ' character). These sequences are then split into lists of tokens. They will then be indexed or vectorized. 0 is a reserved index that won't be assigned to any word.
+Next, we use keras functions text_tokenizer() and fit_text_tokenizer() to turn each of \colorbox{highlightColor}{texts} into a vector of integers based on keras dictionary. We keep maximum number of words to `r format(max_words, scientific=FALSE)`, i.e. only most common `r format(max_words, scientific=FALSE)` words will be kept while generating integer vectors out of \colorbox{highlightColor}{texts}. Reviews in \colorbox{highlightColor}{texts} are then converted into integer vectors \colorbox{highlightColor}{sequences}. By default, all punctuation is removed, turning the texts into space-separated sequences of words (words maybe include the ' character). These sequences are then split into lists of tokens. They will then be indexed or vectorized. 0 is a reserved index that won't be assigned to any word.
 
 The object \colorbox{highlightColor}{tokenizer} has an attribute `word_index`, which is a named list mapping words to their rank/index(int).
 ```{r tokinenizer,cache=TRUE,results='hide',warning=FALSE,message=FALSE}
@@ -150,7 +182,7 @@ y_train<-y[-test_index]
 x_test<-x[test_index]
 y_test<-y[test_index]
 ```
-Rest of the data preparation depends on the type of model we shall be using, so we shall deal it seprately in different model subsections.
+Rest of the data preparation depends on the type of model we shall be using, so we shall deal it separately in different model subsections.
 
 # Dense Layers DNNs
 
@@ -208,7 +240,7 @@ On the first run (or forward pass), the DNN will select a batch of observations,
 
 #### Objective (loss) Function {#loss_function}
 
-First, you need to establish an objective (loss) function to measure performance. For regression problems this might be mean squared error (MSE) and for classification problems it is commonly binary and multi-categorical cross entropy. Following is the brief decription of some loss functions used in keras for regression and classification models.
+First, you need to establish an objective (loss) function to measure performance. For regression problems this might be mean squared error (MSE) and for classification problems it is commonly binary and multi-categorical cross entropy. Following is the brief description of some loss functions used in keras for regression and classification models.
 
 ##### Regression Models
 
@@ -222,7 +254,7 @@ First, you need to establish an objective (loss) function to measure performance
 
 ##### Classification Models
 
-* Crossentropy: crossentropy is usually the best choice whenyou’re dealin g with models that output probabilities. Crossentropy is a quantity from the field of Information Theory that measures the distance between probability distributions or, in this case, between the groundtruth distribution and your predictions. this metric disproportionately punishes predictions where we predict a small probability for the true class.
+* Crossentropy: crossentropy is usually the best choice when you’re dealing with models that output probabilities. Crossentropy is a quantity from the field of Information Theory that measures the distance between probability distributions or, in this case, between the ground truth distribution and your predictions. this metric disproportionately punishes predictions where we predict a small probability for the true class.
   + Binary Crossentropy
 Use this cross-entropy loss when there are only two label classes (assumed to be 0 and 1).
   + Categorical Crossentropy
@@ -295,9 +327,9 @@ $g_{t}$ : Gradient at time t along $w^{j}$
 
 $\epsilon$ : A small positive number to make sure when $v_{t}$ is zero or close to zero, $\Delta w_{t}$ doesn't become too large
 
-Equation 2 implies that the change in paratmeter w^J^ in the current iteration depends on the current gradient as well as a variable learning rate. The variable learning rate is equal to initial learning rate $\eta$ divided by square root of exponential average of squares of gradient. 
+Equation 2 implies that the change in parameter w^J^ in the current iteration depends on the current gradient as well as a variable learning rate. The variable learning rate is equal to initial learning rate $\eta$ divided by square root of exponential average of squares of gradient. 
 
-Now referring again to Fig. 4, $\sqrt{v_{t}+\epsilon}$ is relatively large number in w~1~ direction as compared to w~2~ direction. As a reasult $\Delta w_{t}$ in w~1~ is relatively small as compared to that in w~2~ direction, as we desire to minimize oscillation of learning rate and get to the minima soon, the ideal path marked in the Fig. 4.
+Now referring again to Fig. 4, $\sqrt{v_{t}+\epsilon}$ is relatively large number in w~1~ direction as compared to w~2~ direction. As a result $\Delta w_{t}$ in w~1~ is relatively small as compared to that in w~2~ direction, as we desire to minimize oscillation of learning rate and get to the minima soon, the ideal path marked in the Fig. 4.
 
 * Adam : Adaptive Moment Estimation (Adam) is another method that computes adaptive learning rates for each parameter. In addition to storing an exponentially decaying average of past squared gradients v~t~ like Adadelta and RMSprop, Adam also keeps an exponentially decaying average of past gradients m~t~, similar to momentum. Whereas momentum can be seen as a ball running down a slope, Adam behaves like a heavy ball with friction, which thus prefers flat minima in the error surface. We compute the decaying averages of past and past squared gradients m~t~ and v~t~ respectively as follows:
 
@@ -313,7 +345,7 @@ $\hat{m}_{t} = \frac{m_{t}}{1-\beta^t_{1}}$
 
 $\hat{v}_{t} = \frac{v_{t}}{1-\beta^t_{2}}$
 
-These are then used to update paratmeters just as we have seen in RMSprop.
+These are then used to update parameters just as we have seen in RMSprop.
 
 $w_{t}= w_{t-1}-\eta\frac{\hat{m}_{t}}{\sqrt{\hat{v}}+\epsilon}$
 
@@ -324,6 +356,21 @@ $\beta_{1}= 0.9$
 $\beta_{2}= 0.999$
 
 $\epsilon = 10^{-8}$
+
+## Loss Vs Accuracy
+
+All the models we shall work on using keras will give us two metrics at the end: accuracy and loss. 
+
+Loss can be seen as a distance between the true values of the problem and the values predicted by the model. Greater the loss is, more huge is the errors you made on the data.
+
+Accuracy can be seen as the number of error you made on the data.
+
+That means:
+
+* a low accuracy and huge loss means you made huge errors on a lot of data
+* a low accuracy but low loss means you made little errors on a lot of data
+* a high accuracy with low loss means you made low errors on a few data (best case)
+* a high accuracy but a huge loss, means you made huge errors on a few data.
 
 ## Preparing Data for Dense Layer DNN Models
 
@@ -360,7 +407,7 @@ Here is the summary of the model.
 ```{r cache=TRUE, warning=FALSE, message=FALSE}
 summary(model)
 ```
-Next we shall compile the model using loss function as "binary_crossentropy" (refer to section [Objective (loss) Function](#loss_function)) and using RMSprop optimzer (refer to section [Optimizer](#optimizer)).
+Next we shall compile the model using loss function as "binary_crossentropy" (refer to section [Objective (loss) Function](#loss_function)) and using RMSprop optimizer (refer to section [Optimizer](#optimizer)).
 ```{r eval=FALSE}
 model %>% compile(
   optimizer = optimizer_rmsprop(),
@@ -390,7 +437,7 @@ Following parameters passed to \colorbox{highlightColor}{fit()} function are wor
 
 ```{r echo=FALSE,message=FALSE,warning=FALSE}
 library(keras)
-load("C:/Users/fahee/projects/IMDB/rdas/FFhistory.rda")
+load("./rdas/FFhistory.rda")
 
 ```
 Call to `fit()` returns `hisotry` object. The `history` object includes parameters used to fit the model (history$params) as well as data for each of the metrics being monitored (history$metrics).
@@ -402,7 +449,7 @@ The history object has a plot() method that enables you to visualize training an
 ```{r cache=TRUE,warning=FALSE, message=FALSE}
 plot(history)
 ```
-The epoch at which maximum valdation accuracy is achieved is
+The epoch at which maximum validation accuracy is achieved is
 ```{r cache=TRUE, message=FALSE, warning=FALSE}
 epoch<-which.max(history$metrics$val_acc)
 epoch
@@ -418,11 +465,11 @@ Now, let's fit our model for the whole train dataset for epoch = `r format(epoch
 model %>% fit(x_train, y_train, epochs = epoch, batch_size = 512)
 ```
 ### Results
-We use keras eveluate function to evaluate our model on test data.
-```{r cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
-load("C:/Users/fahee/projects/IMDB/rdas/FFresults.rda")
+We use keras evaluate function to evaluate our model on test data.
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+load("./rdas/FFresults.rda")
 ```
-Finally, our simple dense layer model without any regularizatio gives us following accuracy and loss on the test data.
+Finally, our simple dense layer model without any regularization gives us following accuracy and loss on the test data.
 ```{r eval=FALSE}
 results <- model %>% evaluate(x_test, y_test)
 ```
@@ -433,9 +480,9 @@ In this way, this model achieved an accuracy of `r format(results[[2]]*100, scie
 
 We can print results of our first model as.
 
-```{r cache=TRUE, message=FALSE, warning=FALSE}
+```{r cache=TRUE,message=FALSE, warning=FALSE}
 library(knitr)
-model_results<-data_frame(method="Dense Layer",accuracy=results[[2]],loss=results[[1]])
+model_results<-tibble(method="Dense Layer",accuracy=results[[2]],loss=results[[1]])
 kable(model_results)
 ```
 ## Dense Layer Model with Dropout
@@ -452,7 +499,7 @@ At test time, we scale down the output by the dropout rate. Here, we scale by 0.
 layer_output <-layer_output * 0.5
 ```
 
-In the first desne layer model, we saw that the model overfitting started with 7th layer. Let's add dropout to our dense layer and see how it improves the accuracy.
+In the first dense layer model, we saw that the model overfitting started with 7th layer. Let's add dropout to our dense layer and see how it improves the accuracy.
 ```{r cache=TRUE, message=FALSE, warning=FALSE}
 library(keras)
 model <- keras_model_sequential() %>% 
@@ -464,7 +511,7 @@ model <- keras_model_sequential() %>%
 ```
 ```{r echo=FALSE}
 library(keras)
-load("C:/Users/fahee/projects/IMDB/rdas/FFdropHistory.rda")
+load("./rdas/FFdropHistory.rda")
 ```
 Here is the summary of the model.
 ```{r cache=TRUE,message=FALSE, warning=FALSE}
@@ -493,7 +540,7 @@ To visualize training and validation metrics by epoch we shall plot the `history
 ```{r cache=TRUE,warning=FALSE, message=FALSE}
 plot(history)
 ```
-The epoch at which maximum valdation accuracy is achieved is
+The epoch at which maximum validation accuracy is achieved is
 ```{r cache=TRUE, message=FALSE, warning=FALSE}
 epoch<-which.max(history$metrics$val_acc)
 epoch
@@ -509,8 +556,8 @@ model %>% fit(x_train, y_train, epochs = epoch, batch_size = 512)
 ```
 ### Results
 We use keras evaluate function to evaluate our model on test data.
-```{r cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
-load("C:/Users/fahee/projects/IMDB/rdas/FFdropResults.rda")
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+load("./rdas/FFdropResults.rda")
 ```
 Finally, this dense layers with dropouts models gives us following accuracy and loss on the test data.
 ```{r eval=FALSE}
@@ -521,12 +568,12 @@ results
 ```
 In this way, this model achieved an accuracy of `r format(results[[2]]*100, scientific=FALSE)`.
 
-We can print results of our first model as.
+Following is the comparison of different model results so far.
 
-```{r cache=TRUE, message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE}
 
-model_results<-bind_rows(model_results,data_frame(method="Dense Layer with Dropout",accuracy=results[[2]],loss=results[[1]]))
-kable(model_results)
+model_results2<-rbind(model_results,data.frame(method="Dense Layer with Dropout",accuracy=results[[2]],loss=results[[1]]))
+kable(model_results2)
 ```
 ## Dense Layer Model with Weight Regularization
 
@@ -538,7 +585,7 @@ This cost comes in two flavors:
 
 * L2 regularization— The cost added is proportional to the square of the value of the weight coefficients (the L2 norm of the weights). L2 regularization is also called weight decay in the context of neural networks.
 
-In Keras, weight regularization is added by passing weight regularizer instances to layers as keyword arguments. The weight regulariztion is called kernal regularization.
+In Keras, weight regularization is added by passing weight regularizer instances to layers as keyword arguments. The weight regularization is called kernal regularization.
 
 Let's add kernal regularization to our dense layer model instead of drop out.
 
@@ -586,7 +633,7 @@ To visualize training and validation metrics by epoch we shall plot the `history
 ```{r cache=TRUE,warning=FALSE, message=FALSE}
 plot(history)
 ```
-The epoch at which maximum valdation accuracy is achieved is
+The epoch at which maximum validation accuracy is achieved is
 ```{r cache=TRUE, message=FALSE, warning=FALSE}
 epoch<-which.max(history$metrics$val_acc)
 epoch
@@ -602,23 +649,499 @@ model %>% fit(x_train, y_train, epochs = epoch, batch_size = 512)
 ```
 ### Results
 We use keras evaluate function to evaluate our model on test data.
-```{r cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 load("./rdas/FFL2RegResults.rda")
 ```
 Finally, this dense layers with L2 regularization on weights models gives us following accuracy and loss on the test data.
 ```{r eval=FALSE}
 results <- model %>% evaluate(x_test, y_test)
 ```
-```{r cache=TRUE,message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE}
 results
 ```
 In this way, this model achieved an accuracy of `r format(results[[2]]*100, scientific=FALSE)`.
 
-We can print results of our first model as.
+Following is the comparison of different model results so far.
+
+```{r message=FALSE, warning=FALSE}
+
+model_results3<-rbind(model_results2,data.frame(method="Dense Layer with L2 Weight Regularization",accuracy=results[[2]],loss=results[[1]]))
+kable(model_results3)
+```
+# Advanced Deep Learning Models 
+
+## Preparing Data for Rest of the Models
+
+In the following sections, we shall be using advanced DNN models like 1D Convolution Neural Networks, LSTM or combination of both. For dense layer models, we use one hot encoding to convert `r format(length(x),scientific=FALSE)` reviews, each into a vector of length `r format(max_words,scientific=FALSE)`.
+Another way to prepare text data is to pad your lists so that they all have the same length, turn them into an integer tensor of shape `(samples, word_indices)`, and then use as the first layer in your network a layer capable of handling such integer tensors (embedding layer). 
+
+The movie review database we downloaded has `r format(length(x),scientific=FALSE)` reviews. The average length of these revives is.
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+mean(unlist(lapply(x,length),use.names = FALSE))
+
+```
+While the maximum length of any review in this list is.
+
+```{r cache=TRUE,message=FALSE, warning=FALSE}
+max(unlist(lapply(x,length),use.names = FALSE))
+```
+Following is the code we use to prepare the data.
+```{r cache=TRUE,message=FALSE,warning=FALSE}
+###################################################
+# Preparing data for rest of the models
+###################################################
+# For rest of the models, we don't use one-hot encoding
+# rather we use list of integer vectors in x_train and x_test
+# each representing a review and pad them with trailing 0's
+# if they are short of max_len, if the no of words in review
+# are more than max_len, we truncate rest of the words
+x_train<-x[-test_index]
+y_train<-y[-test_index]
+x_test<-x[test_index]
+y_test<-y[test_index]
+max_features <- 20000  # Number of words to consider as features
+maxlen <- 500          # Cut texts after this number of words 
+# Pad sequences
+x_train<-pad_sequences(x_train, maxlen = maxlen)
+x_test<-pad_sequences(x_test, maxlen = maxlen)
+
+```
+
+Since we are running these models on CPU, where time of execution is not that fast, we decided to limit our reviews length to maximum `r format(maxlen,scientific=FALSE)` words. That means any review longer that `r format(maxlen,scientific=FALSE)` words would be truncated and shorter will be padded with zeros at the end.
+
+In this way, if we select maximum length of `r format(maxlen,scientific=FALSE)` words per review, % of reviews truncated will be.
+```{r cache=TRUE,message=FALSE,warning=FALSE}
+data.frame(nwords=unlist(lapply(x,length),use.names = FALSE))%>%
+  filter(nwords>500)%>%summarise(n=n()/length(x)*100)
+```
+
+## Word Embedding Vs One-hot Encoding
+
+Another popular and powerful way to associate a vector with a word is the use of dense word vectors, also called word embeddings. Whereas the vectors obtained through one-hot encoding are binary, sparse (mostly made of zeros), and very high dimensional (same dimensionality as the number of words in the vocabulary), word embeddings are low­dimensional floating point vectors (that is, dense vectors, as opposed to sparse vectors). Unlike the word vectors obtained via one-hot encoding, word embeddings are learned from data. It’s common to see word embeddings that are 256-dimensional, 512-dimensional, or 1,024-dimensional, when dealing with very large vocabularies. On the other hand, one-hot encoding words generally leads to vectors that are 20,000-dimensional or greater (capturing a vocabulary of 20,000 tokens, in this case). So, word embeddings pack more information into far fewer dimensions.
+
+An embedding layer takes as input a 2D tensor of integers, of shape `(samples,sequence_length)`, where each entry is a sequence of integers.This layer returns a 3D floating-point tensor of shape `(samples,sequence_length, embedding_dimensionality)`. Such a 3D tensor can then be processed by an RNN layer or a 1D convolution layer.
+
+When you instantiate an embedding layer, its weights (its internal dictionary of token vectors) are initially random, just as with any other layer. During training, these word vectors are gradually adjusted via backpropagation, structuring the space into something the downstream model can exploit. Once fully trained, the embedding space will show a lot of structure—a kind of structure specialized for the specific problem for which you’re training your model.
+
+## Bidrectional LSTM Model
+
+### Recurrent Neural Networks
+
+A major characteristic of all neural networks you’ve seen so far, such as densely connected networks and convnets, is that they have no memory. Each input shown to them is processed independently, with no state kept in between inputs. 
+Humans don’t start their thinking from scratch every second. As you read this report, you understand each word based on your understanding of previous words. You don't throw everything away and start thinking from scratch again. Your thoughts have persistence.
+
+As an example, consider the following statements:
+
+Mark was born in Quebec and grew up their until the age of 15. He can speak __________ fluently.
+
+A human can easily fill in the blank above with the word "French", however, a densely connected numeral network or a CNN can't do that.
+
+Recurrent neural networks address this issue. They are networks with loops in them, allowing information to persist.
+
+![RNN have loops]("./Images/RNN-rolled.png")
+
+A recurrent neural network can be thought of as multiple copies of the same network, each passing a message to a successor. Consider what happens if we unroll the loop:
+
+![An Unrolled Recurrent Neural Network]("./Images/RNN-unrolled.png")
+
+This chain-like nature reveals that recurrent neural networks are intimately related to temporal data and sequences. That makes RNNs specially useful for natural language processing.
+
+One major issue with layer_simple_rnn is that although it should theoretically be able to retain at time t
+information about inputs seen many timesteps before, in practice, such long-term dependencies are impossible to learn. This is due to the vanishing gradient problem,an effect that is similar to what is observed with non-recurrent networks (feedforward networks) that are many layers deep: as you keep adding layers to a network, the network eventually becomes untrainable. The theoretical reasons for this effect were [ ]studied by Hochreiter, Schmidhuber, and Bengio in the early 1990s. The LSTM and GRU layers are designed to solve this problem.
+
+### Long Short-Term Memory (LSTM)
+
+Long Short Term Memory networks – usually just called “LSTMs” – are a special kind of RNN, capable of learning long-term dependencies. They were introduced by Hochreiter & Schmidhuber (1997), and were refined and popularized by many people in following work. They work tremendously well on a large variety of problems, and are now widely used.
+
+LSTMs also have a chain like structure like RNNs, but the repeating module has a different structure. Instead of having a single neural network layer, there are four, interacting in a very special way.
+![The repeating module in an LSTM contains four interacting layers]("./Images/LSTM3-chain.png")
+
+The key to LSTMs is the cell state, the horizontal line running through the top of the diagram.
+
+The cell state is kind of like a conveyor belt. It runs straight down the entire chain, with only some minor linear interactions. It’s very easy for information to just flow along it unchanged.
+
+![]("./Images/LSTM3-C-line.png")
+
+The LSTM does have the ability to remove or add information to the cell state, carefully regulated by structures called gates.
+
+Gates are a way to optionally let information through. They are composed out of a sigmoid neural net layer and a point wise multiplication operation.
+
+![Gate]("./Images/LSTM3-gate.png")
+
+The first step in our LSTM is to decide what information we’re going to throw away from the cell state. This decision is made by a sigmoid layer called the “forget gate layer.” It looks at $h_{t−1}$ and $x_{t}$, and outputs a number between 0 and 1 for each number in the cell state $C_{t−1}$. A 1 represents “completely keep this” while a 0 represents “completely get rid of this.”
+
+![$f_{t}$ Forget Gate Layer]("./Images/LSTM3-focus-f.png")
+
+The next step is to decide what new information we’re going to store in the cell state. This has two parts. First, a sigmoid layer called the “input gate layer” decides which values we’ll update. Next, a tanh layer creates a vector of new candidate values, $\hat{C}_t$, that could be added to the state. In the next step, we’ll combine these two to create an update to the state.
+
+![$\hat{C}_t$ and $i_{t}$]("./Images/LSTM3-focus-i.png")
+
+\newpage
+
+It is now time to update the old cell state, $C_{t−1}$, into the new cell state C~t~. The previous steps already decided what to do, we just need to actually do it. We multiply the old state by f~t~, forgetting the things we decided to forget earlier. Then we add $i_{t}*\hat{C}_t$. This is the new candidate values, scaled by how much we decided to update each state value.
+
+![New Cell State]("./Images/LSTM3-focus-C.png")
+
+Finally, the output will be based on our cell state, but will be a filtered version. First, we run a `sigmoid` layer which decides what parts of the cell state we’re going to output. Then, we put the cell state through `tanh` (to push the values to be between −1 and 1) and multiply it by the output of the sigmoid gate, so that we only output the parts we decided to.
+
+![LSTM Cell Output]("./Images/LSTM3-focus-o.png")
+
+\newpage
+### Bidirectional RNN
+
+A bidirectional RNN is a common RNN variant that can offer greater performance than a regular RNN on certain tasks. It’s frequently used in natural language processing.
+
+RNNs are notably order dependent, or time dependent: they process the timesteps of their input sequences in order, and shuffling or reversing the timesteps can completely change the representations the RNN extracts from the sequence. This is precisely the reason they perform well on problems where order is meaningful, such as the
+temperature forecasting problem. A bidirectional RNN exploits the order sensitivity of RNNs: it consists of using two regular RNNs, such as layer_gru and layer_lstm , each of which processes the input sequence in one direction (chronologically and antichronologically), and then merging their representations. By processing a sequence both ways, a bidirectional RNN can catch patterns that may be overlooked by a unidirectional RNN.
+
+### Stacked LSTMs
+
+Another architecture feature we have used in our model is stacking of two LSTM layers. Stacking LSTM hidden layers makes the model deeper, more accurately earning the description as a deep learning technique.
+
+Given that LSTMs operate on sequence data, it means that the addition of layers adds levels of abstraction of input observations over time. In effect, chunking observations over time or representing the problem at different time scales.
+
+Stacked LSTMs or Deep LSTMs were introduced by Graves, et al. in their application of LSTMs to speech recognition, beating a benchmark on a challenging standard problem.
+
+Each LSTMs memory cell requires a 3D input. When an LSTM processes one input sequence of time steps, each memory cell will output a single value for the whole sequence as a 2D array.
+
+To stack LSTM layers, we need to change the configuration of the prior LSTM layer to output a 3D array as input for the subsequent layer.
+
+We can do this by setting the `return_sequences` argument on the layer to True (defaults to False). This will return one output for each input time step and provide a 3D array.
+
+By default, the `return_sequences` is set to `False` in Keras RNN layers, and this means the RNN layer will only return the last hidden state output $h_{t}$. The last hidden state output captures an abstract representation of the input sequence. In some case, it is all we need, such as a classification or regression model where the RNN is followed by the Dense layer(s) to generate logic for news topic classification or score for sentiment analysis, or in a generative model to produce the softmax probabilities for the next possible char.
+
+In the case when LSTM layer is followed by another LSTM layer, setting `return_squence` to TRUE is necessary so that $h_{t}$ of each LSTM cell is forwarded to subsequent LSTM layer.
+
+### Building the Model
+
+Following is the code to apply an embedding layer followed by bidirectional LSTM layer to IMDB data.
 
 ```{r cache=TRUE, message=FALSE, warning=FALSE}
+k_clear_session() # clears keras session
 
-model_results<-bind_rows(model_results,data_frame(method="Dense Layer with L2 Weight Regularization",accuracy=results[[2]],loss=results[[1]]))
-kable(model_results)
+model <- keras_model_sequential() %>% 
+  layer_embedding(input_dim = max_features, output_dim = 128) %>% 
+  layer_dropout(0.9)%>%
+  bidirectional(
+    layer_lstm(units = 64, return_sequences=TRUE,recurrent_activation = "sigmoid")
+  ) %>% 
+  bidirectional(
+    layer_lstm(units = 64,recurrent_activation = "sigmoid")
+  ) %>% 
+  layer_dense(units = 1, activation = "sigmoid")
 ```
-## Preparing Data for Rest of the Models
+Here is the summary of the model.
+```{r cache=TRUE, warning=FALSE, message=FALSE}
+summary(model)
+```
+Please note that originally this model was run on CPU, while the above model was run on nVidia GPU with `cuDNN`. The model that ran on CPU is also included in the code file and achieved similar but a little less accuracy. 
+
+Here to regularize the model we are using a dropout layer before LSTM. It has long been known that applying
+dropout before a recurrent layer hinders learning rather than helping with regularization. In 2015, Yarin Gal, as part of his PhD thesis on Bayesian deep learning, determined the proper way to use dropout with a recurrent network: the same dropout mask (the same pattern of dropped units) should be applied at every timestep, instead of a dropout mask that varies randomly from timestep to timestep. In keras, the `layer_lstm` function has a parameter `recurrent_dropout` to achieve this. The problem is that if we use that parameter, `cuDNN` won't support that model and we'll have to run it on `CPU` or `GPU kernel` (not `cuDNN kernel`) which is painfully slow and takes hours. A compromise is that we have used a very light dropout before LSTM layer.
+
+Another important note to mention here is the use of `sigmoid` as `recurrent_activation`instead of default `hard_sigmoid`. This is necessary requirement to train the model using cuDNN.
+
+Next we shall compile the model using loss function as "binary_crossentropy" (refer to section [Objective (loss) Function](#loss_function)) and using RMSprop optimizer (refer to section [Optimizer](#optimizer)).
+```{r eval=FALSE}
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+) 
+```
+### Model Training
+
+We shall fit the model on training dataset first by dividing it into 80% training and 20% validation. Here is the code.
+```{r eval=FALSE}
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 15,
+  batch_size = 128,
+  validation_split = 0.2
+)
+```
+To visualize training and validation metrics by epoch we shall plot the `history`:
+```{r echo=FALSE,cache=TRUE, warning=FALSE, message=FALSE}
+library(keras)
+load("./rdas/lstmhistory2.rda")
+```
+```{r cache=TRUE,warning=FALSE, message=FALSE}
+plot(history)
+```
+The epoch at which maximum validation accuracy is achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+epoch<-which.max(history$metrics$val_acc)
+epoch
+```
+While the maximum validation accuracy achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+max(history$metrics$val_acc)
+```
+
+Now, let's fit our model for the whole train dataset for epoch = `r format(epoch, scientific=FALSE)`
+```{r cache=TRUE, message=FALSE, warning=FALSE,eval=FALSE}
+model %>% fit(x_train, y_train, epochs = epoch, batch_size = 128)
+```
+### Results
+We use keras evaluate function to evaluate our model on test data.
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+load("./rdas/lstmResults2.rda")
+```
+Finally, this model gives us following accuracy and loss on the test data.
+```{r eval=FALSE}
+results <- model %>% evaluate(x_test, y_test)
+```
+```{r message=FALSE, warning=FALSE}
+results
+```
+In this way, this model achieved an accuracy of `r format(results[[2]]*100, scientific=FALSE)`.
+
+Following is the comparison of different model results so far.
+
+```{r message=FALSE, warning=FALSE}
+model_results4<-rbind(model_results3,data.frame(method="Bidirectional LSTM", accuracy=results[[2]],loss=results[[1]]))
+kable(model_results4)
+```
+## 1D Convnet Model
+
+Convolutional neural networks (CNNs) perform particularly well on computer vision problems, due to their ability to operate convolutionally, extracting features from local input patches and allowing for representation modularity and data efficiency. The same properties that make CNNs excel at computer vision also make them highly relevant to sequence processing. Time can be treated as a spatial dimension, like the height or width of a 2D image.
+
+Such 1D CNNs can be competitive with RNNs on certain sequence-processing problems, usually at a considerably cheaper computational cost. Recently, 1D CNNs, typically used with dilated kernels, have been used with great success for audio generation and machine translation. In addition to these specific successes, it has long been known that small 1D CNNs can offer a fast alternative to RNNs for simple tasks such as text classification and timeseries forecasting.
+
+The2D convolutions extract 2D patches from image tensors and applying an identical transformation to every patch. In
+the same way, you can use 1D convolutions, extracting local 1D patches (sub-sequences) from sequences.
+
+![How 1D convolution works: each output timestep is obtained from a temporal patch in the input sequence]("./Images/1D CNN.jpg")
+
+Such 1D convolution layers can recognize local patterns in a sequence. Because the same input transformation is performed on every patch, a pattern learned at a certain position in a sentence can later be recognized at a different position, making 1D CNNs translation invariant (for temporal translations). For instance, a 1D CNN processing sequences of characters using convolution windows of size 5 should be able to learn words or word fragments of length 5 or less, and it should be able to recognize these words in any context in an input sequence. A character-level 1D CNN is thus able to learn about word morphology.
+
+The 2D pooling operation has a 1D equivalent: extracting 1D patches (sub-sequences) from an input and outputting the maximum value (max pooling) or average value (average pooling). Just as with 2D CNNs, this is used for reducing the length of 1D inputs (sub-sampling).
+
+### Max Pooling
+
+Max pooling layer is used to downsample results of previous 1D CNN layer. The block or pool size is determined by the parameter `pool_size`. For each block, or “pool”, the operation simply involves computing the max value. Doing so for each pool, we get a nicely downsampled outcome, greatly benefiting the spatial hierarchy we need.
+
+### Global Max Pooling
+
+Another type of pooling layer is the Global Max Pooling layer. Here, we set the pool size equal to the input size, so that the max of the entire input is computed as the output value (Dernoncourt, 2017).
+
+Global pooling layers can be used in a variety of cases. Primarily, it can be used to reduce the dimensionality of the feature maps output by some convolutional layer, to replace Flattening and sometimes even Dense layers in your classifier (Christlein et al., 2019). In our case of 1D CNN, it is used before the output layer to replace flattening.
+
+### Building the Model
+
+We build our model using the following code.
+
+```{r cache=TRUE,message=FALSE,warning=FALSE}
+k_clear_session() # clears keras session
+
+model <- keras_model_sequential() %>% 
+  layer_embedding(input_dim = max_features, output_dim = 128,
+                  input_length = maxlen) %>% 
+  layer_dropout(0.2)%>%
+  layer_conv_1d(filters = 250, kernel_size = 3,
+                activation = "relu") %>% 
+  layer_max_pooling_1d(pool_size = 5) %>% 
+  layer_conv_1d(filters = 250, kernel_size = 3, 
+                activation = "relu") %>% 
+  layer_global_max_pooling_1d() %>% 
+  layer_dense(units = 1,activation = "sigmoid")
+```
+Here is the summary of the model.
+```{r cache=TRUE, warning=FALSE, message=FALSE}
+summary(model)
+```
+Next we shall compile the model using loss function as "binary_crossentropy" (refer to section [Objective (loss) Function](#loss_function)) and using RMSprop optimizer (refer to section [Optimizer](#optimizer)).
+```{r eval=FALSE}
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+) 
+```
+### Model Training
+
+We shall fit the model on training dataset first by dividing it into 80% training and 20% validation. Here is the code.
+```{r eval=FALSE}
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 8,
+  batch_size = 32,
+  validation_split = 0.2
+)
+```
+To visualize training and validation metrics by epoch we shall plot the `history`:
+```{r echo=FALSE,cache=TRUE, warning=FALSE, message=FALSE}
+library(keras)
+load("./rdas/1DCNNHistory.rda")
+```
+```{r cache=TRUE,warning=FALSE, message=FALSE}
+plot(history)
+```
+The epoch at which maximum validation accuracy is achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+epoch<-which.max(history$metrics$val_acc)
+epoch
+```
+While the maximum validation accuracy achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+max(history$metrics$val_acc)
+```
+
+Now, let's fit our model for the whole train dataset for epoch = `r format(epoch, scientific=FALSE)`
+```{r cache=TRUE, message=FALSE, warning=FALSE,eval=FALSE}
+model %>% fit(x_train, y_train, epochs = epoch, batch_size = 32)
+```
+### Results
+
+We use keras evaluate function to evaluate our model on test data.
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+load("./rdas/1DCNNresults.rda")
+```
+Finally, this model gives us following accuracy and loss on the test data.
+```{r eval=FALSE}
+results <- model %>% evaluate(x_test, y_test)
+```
+```{r message=FALSE, warning=FALSE}
+results
+```
+In this way, this model achieved an accuracy of `r format(results[[2]]*100, scientific=FALSE)`.
+
+Following is the comparison of different model results so far.
+
+```{r message=FALSE, warning=FALSE}
+model_results5<-rbind(model_results4,data.frame(method="1D Convent", 
+    accuracy=results[[2]],loss=results[[1]]))
+kable(model_results5)
+```
+## 1D conv with 2 bidirectional LSTMs Model
+
+One strategy to combine the speed and lightness of convnets with the order sensitivity
+of RNNs is to use a 1D convnet as a preprocessing step before an RNN (See Fig)
+
+This is especially beneficial when you’re dealing with sequences that are so long they
+can’t realistically be processed with RNNs, such as sequences with thousands of steps.
+The convnet will turn the long input sequence into much shorter (downsampled)
+sequences of higher-level features. This sequence of extracted features then becomes
+the input to the RNN part of the network.
+
+![Combining a 1D Convent and an RNN for processing long sequences]("./Images/1D CNN to LSTM.png")
+
+### Building the Model
+
+We build our model using the following code.
+
+```{r cache=TRUE,message=FALSE,warning=FALSE}
+k_clear_session() # clears keras session
+
+model <- keras_model_sequential() %>% 
+  layer_embedding(input_dim = max_features, output_dim = 128,
+                  input_length = maxlen) %>% 
+  layer_dropout(0.5)%>%
+  layer_conv_1d(filters = 250, kernel_size = 3, activation = "relu") %>% 
+  layer_max_pooling_1d(pool_size = 5) %>% 
+  layer_conv_1d(filters = 250, kernel_size = 3, activation = "relu") %>% 
+  bidirectional(
+    layer_lstm(units = 64, return_sequences=TRUE)
+  ) %>% 
+  bidirectional(
+    layer_lstm(units = 64)
+  ) %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+```
+Here is the summary of the model.
+```{r cache=TRUE, warning=FALSE, message=FALSE}
+summary(model)
+```
+Next we shall compile the model using loss function as "binary_crossentropy" (refer to section [Objective (loss) Function](#loss_function)) and using RMSprop optimizer (refer to section [Optimizer](#optimizer)).
+```{r eval=FALSE}
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+) 
+```
+### Model Training
+
+We shall fit the model on training dataset first by dividing it into 80% training and 20% validation. Here is the code.
+```{r eval=FALSE}
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 5,
+  batch_size = 32,
+  validation_split = 0.2
+)
+```
+To visualize training and validation metrics by epoch we shall plot the `history`:
+```{r echo=FALSE,cache=TRUE, warning=FALSE, message=FALSE}
+library(keras)
+load("./rdas/1DCNN2LSTMHistory.rda")
+```
+```{r cache=TRUE,warning=FALSE, message=FALSE}
+plot(history)
+```
+The epoch at which maximum validation accuracy is achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+epoch<-which.max(history$metrics$val_acc)
+epoch
+```
+While the maximum validation accuracy achieved is
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+max(history$metrics$val_acc)
+```
+
+Now, let's fit our model for the whole train dataset for epoch = `r format(epoch, scientific=FALSE)`
+```{r cache=TRUE, message=FALSE, warning=FALSE,eval=FALSE}
+model %>% fit(x_train, y_train, epochs = epoch, batch_size = 32)
+```
+### Results
+
+We use keras evaluate function to evaluate our model on test data.
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+load("./rdas/1DCNN2LSTMresults.rda")
+```
+Finally, this model gives us following accuracy and loss on the test data.
+```{r eval=FALSE}
+results <- model %>% evaluate(x_test, y_test)
+```
+```{r message=FALSE, warning=FALSE}
+results
+```
+In this way, this model achieved an accuracy of `r format(results[[2]]*100, scientific=FALSE)`.
+
+Following is the comparison of different model results so far.
+
+```{r message=FALSE, warning=FALSE}
+model_results6<-rbind(model_results5,data.frame(method="1D Convent with two bidirectional LSTMs", 
+    accuracy=results[[2]],loss=results[[1]]))
+kable(model_results6)
+```
+# Conclusion and Final Thoughts {#conclusion}
+
+Looking into the table we created for each model accuracy and loss, we found that stacked bidirectional LSTM model performed the best. Compared to that, combination of 1D Convent with LSTMs was also close. In this way, the later was more effective considering the less computational cost and quick speed of execution. 
+
+Though our models achieved a good accuracy, we still think that a much better performance can be obtained. Following are some final thoughts which could not be implemented due to lack of time and resources.
+
+## GPU Execution and Use of Callbacks
+
+As mentioned in [Implementation Notes](#notes), most of these models were run on CPU, due to which we only tried a limited number of epochs. We believe a better result can be obtained by running these models on GPU, trying more epochs during training and even use of callbacks.
+
+### Callbacks
+
+When you are training a model, there are many things you can’t predict from the start. In particular, you can’t tell how many epochs will be needed to get to an optimal validation loss. The models in this study have adopted the strategy of training for enough epochs that you begin overfitting, using the first run to figure out the proper number of epochs to train for, and then finally launching a new training run from scratch using this optimal number. Of course, this approach is wasteful.
+
+A much better way to handle this is to stop training when you measure that the validation loss in no longer improving. This can be achieved using a Keras callback. A callback is an object that is passed to the model in the call to fit and that is called by the model at various points during training. It has access to all the available data about the state of the model and its performance, and it can take action: interrupt training, save a model, load a different weight set, or otherwise alter the state of the model.
+
+Here are some examples of ways you can use callbacks:
+
+* Model checkpointing—Saving the current weights of the model at different points during training.
+* Early stopping—Interrupting training when the validation loss is no longer improving (and saving the best model obtained during training).
+* Dynamically adjusting the value of certain parameters during training—Such as the learning rate of the optimizer.
+* Logging training and validation metrics during training, or visualizing the representations learned by the model as they’re updated.
+
+## Batch Normalizaton
+
+Normalization is a broad category of methods that seek to make different samples seen by a machine-learning model more similar to each other, which helps the model learn and generalize well to new data. The most common form of data normalization is centering the data on 0 by subtracting the mean from the data, and giving the data a unit standard deviation by dividing the data by its standard deviation. In effect, this makes the assumption that the data follows a normal (or Gaussian) distribution and makes sure this distribution is centered and scaled to unit variance.
+
+Data normalization should be a concern after every transformation operated by the network,even if the data entering `layer_dense` or `layer_conv_2d` has a 0 mean and unit variance, there’s no reason to expect a priori that this will be the case for the data coming out.
+
+Batch normalization is a type of layer (layer_batch_normalization in Keras) introduced in 2015 by Ioffe and Szegedy. It can adaptively normalize data even as the mean and variance change over time during training. It works by internally maintaining an exponential moving average of the batch-wise mean and variance of the data seen during training. The main effect of batch normalization is that it helps with gradient propagation—much like residual connections—and thus allows for deeper networks. Some very deep networks can only be trained if they include multiple batch normalization layers.
