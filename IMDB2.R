@@ -1,6 +1,18 @@
+if (!require(keras)) install.packages('keras')
+if (!require(tidyverse)) install.packages('tidyverse')
+if (!require(caret)) install.packages('caret')
+if (!require(knitr)) install.packages('knitr')
+if (!require(tensorflow)) install.packages('tensorflow')
+
 library(keras)
 library(tidyverse)
 library(caret)
+library(tensorflow)
+
+# Installs tensorflow and keras
+install_keras()
+install_tensorflow()
+
 # setting virtual memory size for CPU training
 memory.limit(size=200000)
 #setting maximum words limit for text tokenization
@@ -299,69 +311,6 @@ results <- model %>% evaluate(x_test, y_test)
 results
 #loss  accuracy
 #0.3024800 0.8924931
-##############################################
-# With Glove
-##############################################
-glove_dir = '~/Downloads/glove.6B'
-lines <- readLines(file.path(glove_dir, "glove.6B.100d.txt"))
-embeddings_index <- new.env(hash = TRUE, parent = emptyenv())
-for (i in 1:length(lines)) {
-  line <- lines[[i]]
-  values <- strsplit(line, " ")[[1]]
-  word <- values[[1]]
-  embeddings_index[[word]] <- as.double(values[-1])
-}
-embedding_dim <- 100
-embedding_matrix <- array(0, c(max_words, embedding_dim))
-for (word in names(word_index)) {
-  index <- word_index[[word]]
-  if (index < max_words) {
-    embedding_vector <- embeddings_index[[word]]
-    if (!is.null(embedding_vector))
-      # Words not found in the embedding index will be all zeros.
-      embedding_matrix[index+1,] <- embedding_vector
-  }
-}
-model <- keras_model_sequential() %>% 
-  layer_embedding(input_dim = max_features, output_dim = 100,
-                  input_length = maxlen) %>% 
-  layer_dropout(0.2)%>%
-  layer_conv_1d(filters = 250, kernel_size = 3, activation = "relu") %>% 
-  layer_max_pooling_1d(pool_size = 5) %>% 
-  layer_conv_1d(filters = 250, kernel_size = 3, activation = "relu") %>% 
-  bidirectional(
-    layer_lstm(units = 64, return_sequences=TRUE)
-  ) %>% 
-  bidirectional(
-    layer_lstm(units = 64)
-  ) %>% 
-  layer_dense(units = 1, activation = "sigmoid")
-summary(model)
-# Loading pretrained word embeddings into the embedding layer
-get_layer(model, index = 1) %>%
-  set_weights(list(embedding_matrix)) %>%
-  freeze_weights()
-model %>% compile(
-  optimizer = optimizer_rmsprop(),
-  loss = "binary_crossentropy",
-  metrics = c("acc")
-)
-history <- model %>% fit(
-  x_train, y_train,
-  epochs = 5,
-  batch_size = 32,
-  validation_split = 0.2
-)
-epoch<-which.max(history$metrics$val_acc)
-epoch
-#1
-max(history$metrics$val_acc)
-#0.9227484
-model %>% fit(x_train, y_train, epochs = epoch, batch_size = 32)
-results <- model %>% evaluate(x_test, y_test)
-results
-#loss  accuracy
-#0.4710467 0.8813698
 ####################################################
 # Bidirectional LSTMs Model on cuDNN
 ####################################################

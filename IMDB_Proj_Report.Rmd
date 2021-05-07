@@ -42,14 +42,14 @@ The most common form of randomness used in neural networks is the random initial
 
 These sources of randomness, and more, mean that when you run the exact same neural network algorithm on the exact same data, you are guaranteed to get different results. The model tried in this study are no exception, so definitely when this code is run, you may get a little different results than reported here.
 
-The keras FAQ article [How can I obtain reproducible results using keras during development](https://keras.rstudio.com/articles/faq.html#how-can-i-obtain-reproducible-results-using-keras-during-development-) discusses methods to get reproducible results. However, once source of randomness is GPU computation and CPU parallelization, and they must be disabled in the method mentioned to get reproducible results. Since execution of deep neural network requires a lot of computation power and much slower on CPUs (as we used in most of the models in this study), the method was not tried in this study.
+The keras FAQ article [How can I obtain reproducible results using keras during development](https://keras.rstudio.com/articles/faq.html#how-can-i-obtain-reproducible-results-using-keras-during-development-) discusses methods to get reproducible results. However, one source of randomness is GPU computation and CPU parallelization, and they must be disabled in the method mentioned to get reproducible results. Since execution of deep neural network requires a lot of computation power and much slower on CPUs (as we used in most of the models in this study), the method was not tried in this study.
 
 ## CPU Vs GPU Computation
 
 DNN Applications—in particular, image processing with convolutional networks and sequence processing with recurrent
 neural networks will be excruciatingly slow on CPU, even a fast multicore CPU. Even for applications that can realistically be run on CPU, you’ll generally see speed increase by a factor or 5 or 10 by using a modern GPU. Most of the models in this study were run on CPU, only the LSTM model was finally run on GPU, since it was painfully slow on CPU and even was crashing with 8G of memory. That's why you will notice that every few epochs are used in training the models. This is also discussed in [Conclusion](#conclusion) as an opportunity.
 
-We are not covering the installation of Cuda, cuDNN, tensorflow and keras in this report, though it would have been an interesting topic considering very little and correct information is available on this topic for RStudio; most of the guidelines are for python/anaconda applications.
+We are not covering the installation of Cuda, cuDNN in this report, though it would have been an interesting topic considering very little and correct information is available on this topic for RStudio; most of the guidelines are for python/anaconda applications. All the models in this project were run on CPU, so it may not be required to test the code, except for the last LSTM model which was run on GPU. Even if Cuda and cuDNN is not installed, that model will still run on CPU, but it will be very slow, resource and time consuming.
 
 ## Reproducing the Results
 
@@ -68,6 +68,7 @@ In the project we have used the dataset from Stanford University. It can be down
 [http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz.](http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz.)
 
 The first step is to download the aclImdb_v1.tar.gz file and unzip it into ~/Downloads/ directory. The original aclImdb folder has separate folders for train and test data. 
+
 ### Kaggle
 
 IMDB dataset is also available from Kaggle in CSV form. It can be downloaded from :
@@ -76,11 +77,11 @@ IMDB dataset is also available from Kaggle in CSV form. It can be downloaded fro
 
 ### Keras Library
 
-Another source of IMDB dataset is Keras R library. Keras is the package we have used in this project for deep neural networks. We shall introduce Keras soon in this report.
+Another source of IMDB dataset is Keras R library. Keras is the package we have used in this project for deep neural networks. 
 
 ## Data Analysis
 
-The core dataset contains 50,000 reviews split evenly into 25k train and 25k test sets. The overall distribution of labels is balanced (25k pos and 25k neg). We also include an additional 50,000 unlabeled documents for unsupervised learning. 
+The core dataset contains 50,000 reviews split evenly into 25k train and 25k test sets. The overall distribution of labels is balanced (25k pos and 25k neg). The data also includes an additional 50,000 unlabeled documents for unsupervised learning (not relevant to this project). 
 
 In the entire collection, no more than 30 reviews are allowed for any given movie because reviews for the same movie tend to have correlated ratings. Further, the train and test sets contain a disjoint set of movies, so no significant performance is obtained by memorizing movie-unique terms and their associated with observed labels.  In the labeled train/test sets, a negative review has a score <= 4 out of 10, and a positive review has a score >= 7 out of 10. Thus reviews with more neutral ratings are not included in the train/test sets. 
 
@@ -96,9 +97,20 @@ While merging train and test folders, we also found that there were 3,540 review
 In preparing the data, we transfer reviews texts from ~/Downloads/aclImdb folder into a "texts" string variable, while the sentiment of the review is stored in the "labels" variable. Following is the code.
 
 ```{r grabbing-data,cache=TRUE,results='hide',warning=FALSE,message=FALSE}
+if (!require(keras)) install.packages('keras')
+if (!require(tidyverse)) install.packages('tidyverse')
+if (!require(caret)) install.packages('caret')
+if (!require(knitr)) install.packages('knitr')
+if (!require(tensorflow)) install.packages('tensorflow')
+
 library(keras)
 library(tidyverse)
 library(caret)
+library(tensorflow)
+
+# Installs tensorflow and keras
+install_keras()
+install_tensorflow()
 # setting virtual memory size for CPU training
 memory.limit(size=200000)
 #setting maximum words limit for text tokenization
@@ -170,7 +182,7 @@ Initially we shall set 60% of data for training and 40% for testing using the Ca
 
 Following is the code we have used to breakdown data into train and test set, whereas, we shall use keras functions to further divide the data from train set to validation set at the time of fitting the model. 
 
-Please note that since x is a list of integer vectors (one-hot encoded), we are using y to generate test index.
+Please note that since x is a list of integer vectors, we are using y to generate test index.
 
 ```{r cache=TRUE,results='hide',warning=FALSE,message=FALSE}
 set.seed(100)
@@ -228,8 +240,8 @@ The activation function is simply a mathematical function that determines whethe
 
 ![Activation Functions]("./Images/ActivationFunctions.PNG")
 
-When using rectangular data, the most common approach is to use ReLU activation functions in the hidden layers. The ReLU activation function is simply taking the summed weighted inputs and transforming them to a  
-0 (not fire) or > 0 (fire) if there is enough signal. For the output layers we use the linear activation function for regression problems, the sigmoid activation function for binary classification problems, and softmax for multinomial classification problems.
+When using rectangular data, the most common approach is to use ReLU activation functions in the hidden layers. The ReLU activation function is simply taking the summed weighted inputs and transforming them to a 0 (not fire) or > 0 (fire) if there is enough signal. For the output layers we use the linear activation function for regression problems, the sigmoid activation function for binary classification problems, and softmax for multinomial 
+classification problems.
 
 ### Backpropogation
 
@@ -306,7 +318,7 @@ Referring to the following figure, RMSProp tries to dampen the oscillations in w
 
 ![Grad Descent Vs Ideal Path]("./Images/moment_compo.png")
 
-
+\newpage
 In RMS prop, each update is done according to the equations described below. This update is done separately for each parameter.
 
 For each Parameter w^j^ (j subscript dropped for clarity)
@@ -491,6 +503,8 @@ Dropout is one of the most effective and most commonly used regularization techn
 University of Toronto. Dropout, applied to a layer, consists of randomly dropping out (setting to zero) a number of output features of the layer during training.
 
 The dropout rate is the fraction of the features that are zeroed out. It’s usually set between 0.2 and 0.5. At test time, no units are dropped out; instead, the layer’s output values are scaled down by a factor equal to the dropout rate, to balance for the fact that more units are active than at training time.
+
+We can write a psuedo code for 0.5 dropout as following.
 ```{r eval=FALSE}
 layer_output <-layer_output * sample(0:1, length(layer_output),replace = TRUE)
 ```
@@ -717,7 +731,7 @@ data.frame(nwords=unlist(lapply(x,length),use.names = FALSE))%>%
 
 ## Word Embedding Vs One-hot Encoding
 
-Another popular and powerful way to associate a vector with a word is the use of dense word vectors, also called word embeddings. Whereas the vectors obtained through one-hot encoding are binary, sparse (mostly made of zeros), and very high dimensional (same dimensionality as the number of words in the vocabulary), word embeddings are low­dimensional floating point vectors (that is, dense vectors, as opposed to sparse vectors). Unlike the word vectors obtained via one-hot encoding, word embeddings are learned from data. It’s common to see word embeddings that are 256-dimensional, 512-dimensional, or 1,024-dimensional, when dealing with very large vocabularies. On the other hand, one-hot encoding words generally leads to vectors that are 20,000-dimensional or greater (capturing a vocabulary of 20,000 tokens, in this case). So, word embeddings pack more information into far fewer dimensions.
+Another popular and powerful way to associate a vector with a word is the use of dense word vectors, also called word embeddings. Whereas the vectors obtained through one-hot encoding are binary, sparse (mostly made of zeros), and very high dimensional (same dimensionality as the number of words in the vocabulary), word embeddings are low dimensional floating point vectors (that is, dense vectors, as opposed to sparse vectors). Unlike the word vectors obtained via one-hot encoding, word embeddings are learned from data. It’s common to see word embeddings that are 256-dimensional, 512-dimensional, or 1,024-dimensional, when dealing with very large vocabularies. On the other hand, one-hot encoding words generally leads to vectors that are 20,000-dimensional or greater (capturing a vocabulary of 20,000 tokens, in this case). So, word embeddings pack more information into far fewer dimensions.
 
 An embedding layer takes as input a 2D tensor of integers, of shape `(samples,sequence_length)`, where each entry is a sequence of integers.This layer returns a 3D floating-point tensor of shape `(samples,sequence_length, embedding_dimensionality)`. Such a 3D tensor can then be processed by an RNN layer or a 1D convolution layer.
 
@@ -747,7 +761,7 @@ A recurrent neural network can be thought of as multiple copies of the same netw
 This chain-like nature reveals that recurrent neural networks are intimately related to temporal data and sequences. That makes RNNs specially useful for natural language processing.
 
 One major issue with layer_simple_rnn is that although it should theoretically be able to retain at time t
-information about inputs seen many timesteps before, in practice, such long-term dependencies are impossible to learn. This is due to the vanishing gradient problem,an effect that is similar to what is observed with non-recurrent networks (feedforward networks) that are many layers deep: as you keep adding layers to a network, the network eventually becomes untrainable. The theoretical reasons for this effect were [ ]studied by Hochreiter, Schmidhuber, and Bengio in the early 1990s. The LSTM and GRU layers are designed to solve this problem.
+information about inputs seen many timesteps before, in practice, such long-term dependencies are impossible to learn. This is due to the vanishing gradient problem, an effect that is similar to what is observed with non-recurrent networks (feedforward networks) that are many layers deep: as you keep adding layers to a network, the network eventually becomes untrainable. The theoretical reasons for this effect were studied by Hochreiter, Schmidhuber, and Bengio in the early 1990s. The LSTM and GRU layers are designed to solve this problem.
 
 ### Long Short-Term Memory (LSTM)
 
@@ -839,7 +853,7 @@ Please note that originally this model was run on CPU, while the above model was
 Here to regularize the model we are using a dropout layer before LSTM. It has long been known that applying
 dropout before a recurrent layer hinders learning rather than helping with regularization. In 2015, Yarin Gal, as part of his PhD thesis on Bayesian deep learning, determined the proper way to use dropout with a recurrent network: the same dropout mask (the same pattern of dropped units) should be applied at every timestep, instead of a dropout mask that varies randomly from timestep to timestep. In keras, the `layer_lstm` function has a parameter `recurrent_dropout` to achieve this. The problem is that if we use that parameter, `cuDNN` won't support that model and we'll have to run it on `CPU` or `GPU kernel` (not `cuDNN kernel`) which is painfully slow and takes hours. A compromise is that we have used a very light dropout before LSTM layer.
 
-Another important note to mention here is the use of `sigmoid` as `recurrent_activation`instead of default `hard_sigmoid`. This is necessary requirement to train the model using cuDNN.
+Another important note to mention here is the use of `sigmoid` as `recurrent_activation` instead of default `hard_sigmoid`. This is necessary requirement to train the model using cuDNN.
 
 Next we shall compile the model using loss function as "binary_crossentropy" (refer to section [Objective (loss) Function](#loss_function)) and using RMSprop optimizer (refer to section [Optimizer](#optimizer)).
 ```{r eval=FALSE}
@@ -908,8 +922,7 @@ Convolutional neural networks (CNNs) perform particularly well on computer visio
 
 Such 1D CNNs can be competitive with RNNs on certain sequence-processing problems, usually at a considerably cheaper computational cost. Recently, 1D CNNs, typically used with dilated kernels, have been used with great success for audio generation and machine translation. In addition to these specific successes, it has long been known that small 1D CNNs can offer a fast alternative to RNNs for simple tasks such as text classification and timeseries forecasting.
 
-The2D convolutions extract 2D patches from image tensors and applying an identical transformation to every patch. In
-the same way, you can use 1D convolutions, extracting local 1D patches (sub-sequences) from sequences.
+The 2D convolutions extract 2D patches from image tensors and applying an identical transformation to every patch. In the same way, you can use 1D convolutions, extracting local 1D patches (sub-sequences) from sequences.
 
 ![How 1D convolution works: each output timestep is obtained from a temporal patch in the input sequence]("./Images/1D CNN.jpg")
 
@@ -1016,7 +1029,7 @@ kable(model_results5)
 ## 1D conv with 2 bidirectional LSTMs Model
 
 One strategy to combine the speed and lightness of convnets with the order sensitivity
-of RNNs is to use a 1D convnet as a preprocessing step before an RNN (See Fig)
+of RNNs is to use a 1D convnet as a preprocessing step before an RNN (See Fig 13)
 
 This is especially beneficial when you’re dealing with sequences that are so long they
 can’t realistically be processed with RNNs, such as sequences with thousands of steps.
@@ -1142,6 +1155,6 @@ Here are some examples of ways you can use callbacks:
 
 Normalization is a broad category of methods that seek to make different samples seen by a machine-learning model more similar to each other, which helps the model learn and generalize well to new data. The most common form of data normalization is centering the data on 0 by subtracting the mean from the data, and giving the data a unit standard deviation by dividing the data by its standard deviation. In effect, this makes the assumption that the data follows a normal (or Gaussian) distribution and makes sure this distribution is centered and scaled to unit variance.
 
-Data normalization should be a concern after every transformation operated by the network,even if the data entering `layer_dense` or `layer_conv_2d` has a 0 mean and unit variance, there’s no reason to expect a priori that this will be the case for the data coming out.
+Data normalization should be a concern after every transformation operated by the network, even if the data entering `layer_dense` or `layer_conv_2d` has a 0 mean and unit variance, there’s no reason to expect a priori that this will be the case for the data coming out.
 
 Batch normalization is a type of layer (layer_batch_normalization in Keras) introduced in 2015 by Ioffe and Szegedy. It can adaptively normalize data even as the mean and variance change over time during training. It works by internally maintaining an exponential moving average of the batch-wise mean and variance of the data seen during training. The main effect of batch normalization is that it helps with gradient propagation—much like residual connections—and thus allows for deeper networks. Some very deep networks can only be trained if they include multiple batch normalization layers.
